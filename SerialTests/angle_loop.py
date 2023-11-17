@@ -2,10 +2,10 @@ import serial
 import time
 
 # Configure the serial port. Make sure to use the correct COM port and baud rate.
-ser = serial.Serial('/dev/tty.usbmodem144101', 115200, timeout=1)
-pwm = 1000
+ser = serial.Serial('COM3', 115200, timeout=1)
+pwm = 1500
 flag = 0
-step = 1
+step = 3
 
 def send_pwm_value(pwm_value: int) -> None:
     start_time = time.time()  # Start the timer
