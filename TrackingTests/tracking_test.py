@@ -8,46 +8,34 @@ def setup():
     # Configure the serial port. Make sure to use the correct COM port and baud rate.
     ser = serial.Serial('COM3', 115200, timeout=1)
     # Connect to the QTM server - make sure QTM is recording data
-    telemetry = MoCapStream.MoCap(stream_type='3d_unlabelled')
+    target = MoCapStream.MoCap(stream_type='3d_unlabelled')
+    tracker = MoCapStream.MoCap(stream_type='6d')
 
-    return ser, telemetry
+    return ser, target, tracker
 
 
 def calculate_distance(point1, point2):
     return np.linalg.norm(np.array(point2) - np.array(point1))
 
-
 def calculate_direction_vector(point1, point2):
     vector = np.array(point2) - np.array(point1)
     return vector / np.linalg.norm(vector)
 
+def map_gaze_axis(tracker_pose, target_point):
+    # Assuming tracker_pose is a 6DOF pose represented as [x, y, z, roll, pitch, yaw]
+    # and target_point is a 3D point represented as [x, y, z]
 
-def map_gaze_axis(tracker_points, target_points):
-    # Assuming tracker_points and target_points are lists of 3D coordinates
+    # Extract translation and rotation components from the tracker's pose
+    tracker_translation = tracker_pose[:3]
+    tracker_rotation = tracker_pose[3:]
 
-    # Find the pair of points on the tracker that define the longer gaze axis
-    max_distance = 0
-    gaze_start = None
-    gaze_end = None
-    for i in range(len(tracker_points)):
-        for j in range(i + 1, len(tracker_points)):
-            distance = calculate_distance(tracker_points[i], tracker_points[j])
-            if distance > max_distance:
-                max_distance = distance
-                gaze_start = tracker_points[i]
-                gaze_end = tracker_points[j]
+    # Convert the rotation representation to a rotation matrix
+    rotation_matrix = Rotation.from_euler('xyz', tracker_rotation, degrees=True).as_matrix()
 
-    # Calculate the direction vector of the longer gaze axis
-    gaze_direction = calculate_direction_vector(gaze_start, gaze_end)
-
-    # Apply the direction vector to the target
-    target_mapped = [np.array(point) + gaze_direction * max_distance for point in target_points]
+    # Apply the rotation and translation to the target point
+    target_mapped = np.dot(rotation_matrix, target_point) + tracker_translation
 
     return target_mapped
-
-# Example usage:
-tracker_points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
-target_points = [(1, 1, 1), (2, 1, 1), (1, 2, 1)]
 
 
 def send_pwm_value(pwm_value):
@@ -64,7 +52,50 @@ def send_pwm_value(pwm_value):
         print("Invalid PWM value. Please enter a value between 900 and 2100.")
 
 
-def main(serial, telemetry) -> None:
+def point_towards_target(tracker_position, tracker_yaw, target_point):
+    # Calculate the direction vector from the current position to the target point
+    direction_vector = np.subtract(target_point, tracker_position)
+    
+    # Calculate the yaw angle to point towards the target (arctan2 is used to handle all quadrants)
+    target_yaw = np.arctan2(direction_vector[1], direction_vector[0])
+
+    return target_yaw
+
+
+def yaw_to_pwm(change_in_yaw, yaw_range=80, pwm_min=900, pwm_max=2100):
+    # Calculate PWM value based on the change in yaw
+    pwm_value = pwm_min + ((change_in_yaw / yaw_range) * (pwm_max - pwm_min))
+
+    # Ensure the PWM value is within the valid range
+    pwm_value = max(pwm_min, min(pwm_value, pwm_max))
+
+    return pwm_value
+
+
+def calibrate_yaw(tracker, idx=0, lim=100):
+    '''
+    Calculates the yaw of tracker from global coordinate access when pwm is 1500.
+    
+    Args:
+        tracker (MoCapStream.MoCap): The tracker object.
+    
+    Returns:
+        yaw_offset (float): The yaw offset of the tracker from global coordinates.
+    '''
+    yaw = np.zeros(100)
+    send_pwm_value(1500)
+
+    while idx < lim:
+        yaw[idx] = tracker.rotation
+        idx += 1
+        time.sleep(1/100)
+    
+    yaw_offset = np.mean(yaw)
+
+    return yaw_offset
+        
+
+def main(ser, target, tracker, pwm = 1500, flag = 0, step = 3) -> None:
     # TODO: Configure main loop logic
     '''
     Prototype pseudo code:
@@ -77,12 +108,33 @@ def main(serial, telemetry) -> None:
     3. Map coordinate transformation to PWM values
     4. Send PWM values to micro controller
     '''
+    offset = calibrate_yaw(tracker)
+
     try:
         while True:
-            print(telemetry.position)
-            send_pwm_value(1800)
-            mapped_target = map_gaze_axis(tracker_points, target_points)
-            print("Mapped Target Points:", mapped_target)
+            # print(f"Tracker position: {tracker.rotation - offset}")
+            # print(f"Target position: {target.position}\n")
+            start_time = time.time()
+
+            tracker_pose = tracker.state
+            tracker_position = tracker_pose[:3]
+            tracker_rotation = tracker_pose[3:]
+            tracker_yaw = tracker_rotation[2] - offset
+
+            target_point = target.position
+
+            target_yaw = point_towards_target(tracker_position, tracker_yaw, target_point)
+
+            change_in_yaw = target_yaw - tracker_yaw
+
+            mapped_pwm = yaw_to_pwm(change_in_yaw)
+
+            print(mapped_pwm)
+
+            send_pwm_value(mapped_pwm)
+            time.sleep(5)
+            print(f"--- {time.time() - start_time} seconds ---")
+
 
     except KeyboardInterrupt:
         print("Exiting program.")
@@ -91,6 +143,8 @@ def main(serial, telemetry) -> None:
 
 if __name__ == "__main__":
     #  Call setup function - connecting serial and QTM server
-    ser, telemetry = setup()
+    ser, target, tracker = setup()
+
     # Call main function - main loop
-    main(ser, telemetry)
+    main(ser, target, tracker)
+

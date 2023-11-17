@@ -94,10 +94,10 @@ class MoCap(Thread):
 
             pos, rot = component_6d[0]
             self.component = component_6d
-            self.position = [pos.x, pos.y]
+            self.position = [pos.x, pos.y, pos.z]
             self.height = pos.z
             self.rotation = rot.a3
-            self.state = [-pos.y, pos.x, pos.z, rot.a3] # Negative for roll inverse
+            self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3] # Negative for roll inverse
 
         elif self.stream_type == '3d_unlabelled':
             # Extract unlabelled 3d component from packet
@@ -109,7 +109,8 @@ class MoCap(Thread):
                 print('[QTM] Packet without 6D component! Moving on...')
                 self.tracking_loss += 1
                 return
-            self.position = component_3d[0]
+            pos = component_3d[0]
+            self.position = [pos.x, pos.y, pos.z]
         # # Extract relevant body data from 6D component
         # body_6d = component_6d[self._body_idx]
         # # Create Pose object from 6D data
