@@ -1,12 +1,13 @@
 from threading import Thread
 import asyncio
+from scipy.io import savemat
 import qtm
-import scipy.io
+import math
 
 
 class MoCap(Thread):
 
-    def __init__(self, position=0, rotation=0, height=0, marker=0, qtm_ip="127.0.0.1", stream_type='6d'):
+    def __init__(self, position=[0,0], rotation=0, height=0, qtm_ip="192.168.100.1", stream_type='6d'):
         """
         Constructs QtmWrapper object
         :param position: 6D body position
@@ -23,10 +24,10 @@ class MoCap(Thread):
         self.height = height
         self.position = position
         self.rotation = rotation
-        self.marker = marker
+        self.state = [0, 0, 0, 0]
         self.frame = 0
         self.stream_type = stream_type
-
+        self.component = []
         self.tracking_loss = 0
 
         self._body_idx = None
@@ -35,7 +36,7 @@ class MoCap(Thread):
 
         self.start()
 
-    def run(self) -> None:
+    def run(self):
         """
         Run QTM wrapper coroutine.
         """
@@ -63,7 +64,7 @@ class MoCap(Thread):
             params_xml = await self._connection.get_parameters(parameters=['6d'])
 
             # Assign 6D streaming callback
-            await self._connection.stream_frames(components=["6D"], on_packet=self._on_packet)
+            await self._connection.stream_frames(components=['6DEuler'], on_packet=self._on_packet)
 
         if self.stream_type == '3d_unlabelled':
             # Register index of body for 6D tracking
@@ -71,13 +72,6 @@ class MoCap(Thread):
 
             # Assign 6D streaming callback
             await self._connection.stream_frames(components=["3dnolabels"], on_packet=self._on_packet)
-
-        if self.stream_type == '3d_labelled':
-            # Register index of body for 6D tracking
-            params_xml = await self._connection.get_parameters(parameters=['3d'])
-
-            # Assign 6D streaming callback
-            await self._connection.stream_frames(components=["3d"], on_packet=self._on_packet)
 
     def _on_packet(self, packet):
         """
@@ -89,7 +83,7 @@ class MoCap(Thread):
         """
         if self.stream_type == '6d':
             # Extract 6D component from packet
-            header, component_6d = packet.get_6d()
+            header, component_6d = packet.get_6d_euler()
             self.frame = packet.framenumber
 
             # Increment tracking loss if no component found
@@ -99,11 +93,13 @@ class MoCap(Thread):
                 return
 
             pos, rot = component_6d[0]
-            self.position = pos
+            self.component = component_6d
+            self.position = [pos.x, pos.y]
             self.height = pos.z
-            self.rotation = rot
+            self.rotation = rot.a3
+            self.state = [-pos.y, pos.x, pos.z, rot.a3] # Negative for roll inverse
 
-        elif self.stream_type == "3d_unlabelled":
+        elif self.stream_type == '3d_unlabelled':
             # Extract unlabelled 3d component from packet
             header, component_3d = packet.get_3d_markers_no_label()
             self.frame = packet.framenumber
@@ -113,19 +109,7 @@ class MoCap(Thread):
                 print('[QTM] Packet without 6D component! Moving on...')
                 self.tracking_loss += 1
                 return
-            self.marker = component_3d
-
-        elif self.stream_type == '3d_labelled':
-            # Extract unlabelled 3d component from packet
-            header, component_3d = packet.get_3d_markers()
-            self.frame = packet.framenumber
-
-            # Increment tracking loss if no component found
-            if component_3d is None:
-                print('[QTM] Packet without 6D component! Moving on...')
-                self.tracking_loss += 1
-                return
-            self.marker = component_3d
+            self.position = component_3d[0]
         # # Extract relevant body data from 6D component
         # body_6d = component_6d[self._body_idx]
         # # Create Pose object from 6D data
@@ -155,17 +139,18 @@ class MoCap(Thread):
 class DataLogger:
     def __init__(self):
         self.height = []
-        self.actuation = []
+        self.velocity = []
         self.timeStamp = []
         self.ref = []
 
     def log(self, data):
-        self.actuation.append(data[0])
+        self.velocity.append(data[0])
         self.height.append(data[1])
         self.timeStamp.append(data[2])
         self.ref.append(data[3])
 
     def save_file(self, file_path='data.mat'):
-        mdic = {'height': self.height, 'thrust': self.actuation, 'time_stamp': self.timeStamp}
-        scipy.io.savemat(file_path, mdic)
+        mdic = {'height': self.height, 'velocity': self.velocity, 'time_stamp': self.timeStamp, 'estimate_height': self.ref}
+        savemat(file_path, mdic)
+
 
