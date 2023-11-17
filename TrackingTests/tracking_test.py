@@ -1,6 +1,8 @@
 import serial
 import time
 import MoCapStream
+import numpy as np
+
 
 def setup():
     # Configure the serial port. Make sure to use the correct COM port and baud rate.
@@ -9,6 +11,43 @@ def setup():
     telemetry = MoCapStream.MoCap(stream_type='3d_unlabelled')
 
     return ser, telemetry
+
+
+def calculate_distance(point1, point2):
+    return np.linalg.norm(np.array(point2) - np.array(point1))
+
+
+def calculate_direction_vector(point1, point2):
+    vector = np.array(point2) - np.array(point1)
+    return vector / np.linalg.norm(vector)
+
+
+def map_gaze_axis(tracker_points, target_points):
+    # Assuming tracker_points and target_points are lists of 3D coordinates
+
+    # Find the pair of points on the tracker that define the longer gaze axis
+    max_distance = 0
+    gaze_start = None
+    gaze_end = None
+    for i in range(len(tracker_points)):
+        for j in range(i + 1, len(tracker_points)):
+            distance = calculate_distance(tracker_points[i], tracker_points[j])
+            if distance > max_distance:
+                max_distance = distance
+                gaze_start = tracker_points[i]
+                gaze_end = tracker_points[j]
+
+    # Calculate the direction vector of the longer gaze axis
+    gaze_direction = calculate_direction_vector(gaze_start, gaze_end)
+
+    # Apply the direction vector to the target
+    target_mapped = [np.array(point) + gaze_direction * max_distance for point in target_points]
+
+    return target_mapped
+
+# Example usage:
+tracker_points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]
+target_points = [(1, 1, 1), (2, 1, 1), (1, 2, 1)]
 
 
 def send_pwm_value(pwm_value):
@@ -42,6 +81,8 @@ def main(serial, telemetry) -> None:
         while True:
             print(telemetry.position)
             send_pwm_value(1800)
+            mapped_target = map_gaze_axis(tracker_points, target_points)
+            print("Mapped Target Points:", mapped_target)
 
     except KeyboardInterrupt:
         print("Exiting program.")
