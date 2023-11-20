@@ -2,6 +2,7 @@ import serial
 import time
 import MoCapStream
 import numpy as np
+import math
 
 
 def setup():
@@ -12,30 +13,6 @@ def setup():
     tracker = MoCapStream.MoCap(stream_type='6d')
 
     return ser, target, tracker
-
-
-def calculate_distance(point1, point2):
-    return np.linalg.norm(np.array(point2) - np.array(point1))
-
-def calculate_direction_vector(point1, point2):
-    vector = np.array(point2) - np.array(point1)
-    return vector / np.linalg.norm(vector)
-
-def map_gaze_axis(tracker_pose, target_point):
-    # Assuming tracker_pose is a 6DOF pose represented as [x, y, z, roll, pitch, yaw]
-    # and target_point is a 3D point represented as [x, y, z]
-
-    # Extract translation and rotation components from the tracker's pose
-    tracker_translation = tracker_pose[:3]
-    tracker_rotation = tracker_pose[3:]
-
-    # Convert the rotation representation to a rotation matrix
-    rotation_matrix = Rotation.from_euler('xyz', tracker_rotation, degrees=True).as_matrix()
-
-    # Apply the rotation and translation to the target point
-    target_mapped = np.dot(rotation_matrix, target_point) + tracker_translation
-
-    return target_mapped
 
 
 def send_pwm_value(pwm_value):
@@ -52,29 +29,10 @@ def send_pwm_value(pwm_value):
         print("Invalid PWM value. Please enter a value between 900 and 2100.")
 
 
-def point_towards_target(tracker_position, tracker_yaw, target_point):
-    # Calculate the direction vector from the current position to the target point
-    direction_vector = np.subtract(target_point, tracker_position)
-    
-    # Calculate the yaw angle to point towards the target (arctan2 is used to handle all quadrants)
-    target_yaw = np.arctan2(direction_vector[1], direction_vector[0])
-
-    return target_yaw
-
-
-def yaw_to_pwm(change_in_yaw, yaw_range=80, pwm_min=900, pwm_max=2100):
-    # Calculate PWM value based on the change in yaw
-    pwm_value = pwm_min + ((change_in_yaw / yaw_range) * (pwm_max - pwm_min))
-
-    # Ensure the PWM value is within the valid range
-    pwm_value = max(pwm_min, min(pwm_value, pwm_max))
-
-    return pwm_value
-
-
 def calibrate_yaw(tracker, idx=0, lim=100):
     '''
-    Calculates the yaw of tracker from global coordinate access when pwm is 1500.
+    Sets the PWM out to 1500 and captures 100 samples of the tracker's yaw.
+    Calculates the mean of the yaw values and returns the mean as the yaw offset.
     
     Args:
         tracker (MoCapStream.MoCap): The tracker object.
@@ -95,6 +53,27 @@ def calibrate_yaw(tracker, idx=0, lim=100):
     return yaw_offset
         
 
+def calculate_yaw_change(tracker_position, target_position, offset) -> int:
+    # Calculate the vector from the tracker to the target
+    vector_to_target = [target_position[0] - tracker_position[0],
+                        target_position[1] - tracker_position[1],
+                        target_position[2] - tracker_position[2]]
+
+    # Calculate the current yaw angle of the tracker
+    current_yaw = math.atan2(vector_to_target[1], vector_to_target[0])
+
+    # Adjust for the yaw offset obtained during calibration
+    current_yaw -= offset
+
+    return current_yaw
+
+
+def map_yaw_change_to_pwm(yaw_change, pwm_center=1500, pwm_range=600) -> int:
+    # Map yaw change to PWM values based on your requirements
+    # This is a simple linear mapping for illustration, adjust as needed
+    return int(pwm_center + yaw_change * pwm_range / (2 * math.pi))
+
+
 def main(ser, target, tracker, pwm = 1500, flag = 0, step = 3) -> None:
     # TODO: Configure main loop logic
     '''
@@ -112,28 +91,26 @@ def main(ser, target, tracker, pwm = 1500, flag = 0, step = 3) -> None:
 
     try:
         while True:
-            # print(f"Tracker position: {tracker.rotation - offset}")
-            # print(f"Target position: {target.position}\n")
-            start_time = time.time()
-
+            # Returns x,y,z,roll,pitch,yaw of tracker rigid body
             tracker_pose = tracker.state
+
             tracker_position = tracker_pose[:3]
             tracker_rotation = tracker_pose[3:]
-            tracker_yaw = tracker_rotation[2] - offset
+            tracker_yaw = tracker_rotation[2]
 
+            # Returns x,y,z of target point
             target_point = target.position
 
-            target_yaw = point_towards_target(tracker_position, tracker_yaw, target_point)
+            # Calculate the yaw angle change needed for alignment
+            yaw_change = calculate_yaw_change(tracker_position, target_point, offset)
 
-            change_in_yaw = target_yaw - tracker_yaw
+            # Map the yaw change to PWM values
+            pwm_value = map_yaw_change_to_pwm(yaw_change)
 
-            mapped_pwm = yaw_to_pwm(change_in_yaw)
+            # Send PWM values to the servo motor
+            send_pwm_value(pwm_value, ser)
 
-            print(mapped_pwm)
-
-            send_pwm_value(mapped_pwm)
-            time.sleep(5)
-            print(f"--- {time.time() - start_time} seconds ---")
+            time.sleep(1)
 
 
     except KeyboardInterrupt:

@@ -2,7 +2,7 @@ import serial
 import time
 
 # Configure the serial port. Make sure to use the correct COM port and baud rate.
-ser = serial.Serial('COM3', 115200, timeout=1)
+ser = serial.Serial('/dev/tty.usbmodemF412FA65D0902', 115200, timeout=1)
 pwm = 1500
 flag = 0
 step = 3
@@ -35,7 +35,7 @@ try:
         elif pwm <= 1000:
             flag = 0
         send_pwm_value(pwm)
-        time.sleep(1/1000)
+        time.sleep(10/1000)
         
 
 except KeyboardInterrupt:
