@@ -2,7 +2,9 @@ import serial
 import time
 import MoCapStream
 import numpy as np
+import vec_math as vm
 import math
+from PID import PID_controller as PID
 
 
 def setup():
@@ -15,102 +17,98 @@ def setup():
     return ser, target, tracker
 
 
-def send_pwm_value(pwm_value):
-    '''
-    Sends a PWM value to the micro controller.
+def calibrate_yaw(tracker, us_range=(1000, 2000), num_cycles=3, samples_per_cycle=2):
+    print(f"------Calibrating yaw offset for {num_cycles} cycles------\n")
+
+    # Send 1500 us to center the servo and wait for manual center alignment
+    send_us_val(1500)
+    # input("Manually align the servo and press Enter when ready...")
+    time.sleep(1)
+    yaw_center = tracker.rotation
     
-    Args:
-        pwm_value (int): The PWM value to send to the micro controller.
-        serial (serial.Serial): The serial port to send the PWM value to.
-    '''
-    if 900 <= pwm_value <= 2100:
-        ser.write(f"{pwm_value}\n".encode())
+    min_yaw = float('inf')
+    max_yaw = float('-inf')
+
+    for _ in range(num_cycles):
+        for us_val in range(us_range[0], us_range[1] + 1, (us_range[1] - us_range[0]) // samples_per_cycle):
+            send_us_val(us_val)
+            time.sleep(1)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
+            yaw = tracker.rotation
+            # Normalize the yaw angle to the range [0, 360]
+            yaw = (yaw + 360) % 360
+            min_yaw = min(min_yaw, yaw)
+            max_yaw = max(max_yaw, yaw)
+
+    yaw_range = (abs(min_yaw) + abs(max_yaw))
+
+    print(f"Yaw center: {yaw_center} degrees\n")
+    print(f"Yaw range: {yaw_range} degrees\n")
+    time.sleep(3)
+
+    return yaw_center, yaw_range
+
+
+def map_yaw_2_us(target_yaw, yaw_center, yaw_range, us_center=1500, us_range=500) -> int:
+
+    # Map the yaw angle to a us value
+    us_val = us_center + target_yaw/yaw_range * us_range
+
+    return us_val
+
+
+def send_us_val(us_val):
+
+    if 1000 <= us_val <= 2000:
+        ser.write(f"{us_val}\n".encode())
     else:
-        print("Invalid PWM value. Please enter a value between 900 and 2100.")
+        print("Invalid us val. Please enter a val between 900 and 2100.")
 
 
-def calibrate_yaw(tracker, idx=0, lim=100):
-    '''
-    Sets the PWM out to 1500 and captures 100 samples of the tracker's yaw.
-    Calculates the mean of the yaw values and returns the mean as the yaw offset.
-    
-    Args:
-        tracker (MoCapStream.MoCap): The tracker object.
-    
-    Returns:
-        yaw_offset (float): The yaw offset of the tracker from global coordinates.
-    '''
-    yaw = np.zeros(100)
-    send_pwm_value(1500)
+def main(ser, target, tracker, us = 1500, flag = 0, step = 3) -> None:
 
-    while idx < lim:
-        yaw[idx] = tracker.rotation
-        idx += 1
-        time.sleep(1/100)
-    
-    yaw_offset = np.mean(yaw)
+    # Grab and state and wait to ensure QTM connection is established
+    tracker_pose = tracker.state
+    time.sleep(1)
 
-    return yaw_offset
-        
+    pid = PID(3, 0.1, 0)
 
-def calculate_yaw_change(tracker_position, target_position, offset) -> int:
-    # Calculate the vector from the tracker to the target
-    vector_to_target = [target_position[0] - tracker_position[0],
-                        target_position[1] - tracker_position[1],
-                        target_position[2] - tracker_position[2]]
+    # Calibrate to obtain the yaw offset
+    yaw_centre, yaw_range = calibrate_yaw(tracker)
 
-    # Calculate the current yaw angle of the tracker
-    current_yaw = math.atan2(vector_to_target[1], vector_to_target[0])
+    send_us_val(us)
+    time.sleep(1)
 
-    # Adjust for the yaw offset obtained during calibration
-    current_yaw -= offset
-
-    return current_yaw
-
-
-def map_yaw_change_to_pwm(yaw_change, pwm_center=1500, pwm_range=600) -> int:
-    # Map yaw change to PWM values based on your requirements
-    # This is a simple linear mapping for illustration, adjust as needed
-    return int(pwm_center + yaw_change * pwm_range / (2 * math.pi))
-
-
-def main(ser, target, tracker, pwm = 1500, flag = 0, step = 3) -> None:
-    # TODO: Configure main loop logic
-    '''
-    Prototype pseudo code:
-    1. Get current 3D unlabelled markers from QTM - use telemetry.position
-        - This returns a dictionary of marker names and their positions
-        - This will have 2 objects: the target and the tracker
-    2. Do coordinate calculation to find coordinate transformation needed to map the tracker to the target
-        - Try masters method first with timeit
-        - Likely too slow so implement with core math functions
-    3. Map coordinate transformation to PWM values
-    4. Send PWM values to micro controller
-    '''
-    offset = calibrate_yaw(tracker)
+    tracker_basis_pos = tracker.state[:3]
+    # print(f"Tracker basis position: {tracker_basis_pos}\n")
+    yaw_basis = vm.calc_yaw_vec(yaw_centre, tracker_basis_pos)
+    # print(f"Tracker basis yaw: {yaw_basis} degrees\n")
 
     try:
         while True:
-            # Returns x,y,z,roll,pitch,yaw of tracker rigid body
-            tracker_pose = tracker.state
-
-            tracker_position = tracker_pose[:3]
-            tracker_rotation = tracker_pose[3:]
-            tracker_yaw = tracker_rotation[2]
-
             # Returns x,y,z of target point
-            target_point = target.position
+            target_point = target.position 
 
-            # Calculate the yaw angle change needed for alignment
-            yaw_change = calculate_yaw_change(tracker_position, target_point, offset)
+            yaw = tracker.rotation
+            print(f"Yaw: {yaw} degrees\n")
 
-            # Map the yaw change to PWM values
-            pwm_value = map_yaw_change_to_pwm(yaw_change)
+            # Calculate the vector from the tracker basis to the target point
+            target_vec = vm.calc_vec(tracker_basis_pos, target_point)
+            print(f"Target vector: {target_vec}\n")
 
-            # Send PWM values to the servo motor
-            send_pwm_value(pwm_value, ser)
+            # Calculate the yaw angle between the target point and the tracker basis
+            yaw_target = vm.vec_ang_delta(yaw_basis, target_vec)
+            print(f"Yaw target: {yaw_target} degrees\n")
 
-            time.sleep(1)
+            # Calculate the us val to send to the servo motor
+            us_val = map_yaw_2_us(yaw_target, yaw_centre, yaw_range)
+            print(f"Sending us val: {us_val}\n")
+
+            control = pid.update(us_val)
+
+            # Send us vals to the servo motor
+            send_us_val(us_val)
+
+            time.sleep(0.01)
 
 
     except KeyboardInterrupt:
