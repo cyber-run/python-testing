@@ -43,7 +43,7 @@ class ServoControl:
                 yaw = self.tracker.rotation
                 # Normalize the yaw angle to the range [0, 360]
                 yaw = (yaw + 360) % 360
-                print(f'Yaw: {yaw} degrees\n')
+                # print(f'Yaw: {yaw} degrees\n')
                 self.min_yaw = min(self.min_yaw, yaw)
                 self.max_yaw = max(self.max_yaw, yaw)
 
@@ -65,7 +65,7 @@ class ServoControl:
         us_val = us_center + (( self.yaw/self.yaw_range) * us_range)
 
         print(f"Us val: {us_val}\n")
-        print(f"------------------------\n\n")
+        print(f"------------------------------------------------\n")
 
         self.send_us_val(us_val)
         
@@ -75,16 +75,28 @@ class ServoControl:
         # Grab positions of target and tracker and wait for small duration to ensure connection to DB
         target_pos = self.target.position
         tracker_pos = self.tracker.position
-        time.sleep(2)
+        time.sleep(1)
 
         # Call calibrate yaw function to calibrate the yaw offset
         self.calibrate_yaw()
-        time.sleep(2)
+        time.sleep(1)
 
         self.us_val = 1000 # For debug purposes put arbitrary bottom pwm period
 
         while True:
             try:
+                # Condition to skip iteration if target or tracker position is None or NaN
+                # if target_pos is None or tracker_pos is None:
+                #     print("Target or tracker position is None. Skipping iteration.")
+                #     break
+                # if target_pos is float("NaN") or tracker_pos is float("NaN"):
+                #     print("Target or tracker position is NaN. Skipping iteration.")
+                #     break
+
+                if self.target.body_lost is True or self.tracker.body_lost is True:
+                    print(f"Target or tracker body lost. Skipping iteration.\n")
+                    continue
+
                 # Get current tracker yaw
                 tracker_yaw = self.tracker.rotation
 
@@ -94,7 +106,6 @@ class ServoControl:
                 # Get current positions of target and tracker
                 target_pos = self.target.position
                 tracker_pos = self.tracker.position
-
 
                 # Calculate the vector between the target and tracker
                 target_vec = vm.calc_vec(target_pos, tracker_pos)
@@ -109,13 +120,13 @@ class ServoControl:
 
                 self.set_yaw(control)
 
-                time.sleep(0.01)
+                time.sleep(1)
 
 
             except KeyboardInterrupt:
                 print("Exiting program.")
                 self.ser.close()
-                return False
+                return
 
 if __name__ == "__main__":
     servo_controller = ServoControl()

@@ -24,7 +24,7 @@ class MoCap(Thread):
         self.height = height
         self.position = position
         self.rotation = rotation
-        self.state = [0, 0, 0, 0]
+        self.state = [0, 0, 0, 0, 0, 0]
         self.frame = 0
         self.stream_type = stream_type
         self.component = []
@@ -33,6 +33,8 @@ class MoCap(Thread):
         self._body_idx = None
         self._connection = None
         self._stay_open = True
+        self.body_lost = False
+        self.marker_lost = False
 
         self.start()
 
@@ -88,8 +90,9 @@ class MoCap(Thread):
 
             # Increment tracking loss if no component found
             if component_6d is None:
-                print('[QTM] Packet without 6D component! Moving on...')
+                print('[QTM] 6DoF rigid body not found.')
                 self.tracking_loss += 1
+                self.body_lost = True
                 return
 
             pos, rot = component_6d[0]
@@ -97,7 +100,8 @@ class MoCap(Thread):
             self.position = [pos.x, pos.y, pos.z]
             self.height = pos.z
             self.rotation = rot.a3
-            self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3] # Negative for roll inverse
+            self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3]
+            self.body_lost = False
 
         elif self.stream_type == '3d_unlabelled':
             # Extract unlabelled 3d component from packet
@@ -105,22 +109,14 @@ class MoCap(Thread):
             self.frame = packet.framenumber
 
             # Increment tracking loss if no component found
-            if component_3d is None:
-                print('[QTM] Packet without 6D component! Moving on...')
-                self.tracking_loss += 1
+            if component_3d is None or not component_3d:
+                print('[QTM] 3D Unlabelled marker not found.')
+                self.marker_lost = True
                 return
+
             pos = component_3d[0]
             self.position = [pos.x, pos.y, pos.z]
-        # # Extract relevant body data from 6D component
-        # body_6d = component_6d[self._body_idx]
-        # # Create Pose object from 6D data
-        # pose = Pose.from_qtm_6d(body_6d)
-        # # Check validity and pass on
-        # if pose.is_valid():
-        #     self.on_pose(pose)
-        #     self.tracking_loss = 0
-        # else:
-        #     self.tracking_loss += 1
+            self.marker_lost = False
 
     async def _close(self):
         """
