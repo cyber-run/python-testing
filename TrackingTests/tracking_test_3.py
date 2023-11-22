@@ -1,6 +1,7 @@
 from PID import PID_controller as PID
 from MoCapStream import MoCap
 import vec_math as vm
+import logging
 import timeit
 import serial
 import time
@@ -9,7 +10,7 @@ import time
 class ServoControl:
     def __init__(self, port='COM3', baud_rate=115200, timeout=1):
         self.ser = serial.Serial(port, baud_rate, timeout=timeout)
-        self.target = MoCap(stream_type='3d_unlabelled')
+        self.target = MoCap(stream_type='3d')
         self.tracker = MoCap(stream_type='6d')
         self.pid = PID(0.2, 0.01, 0.05)
 
@@ -85,16 +86,12 @@ class ServoControl:
 
         while True:
             try:
-                # Condition to skip iteration if target or tracker position is None or NaN
-                # if target_pos is None or tracker_pos is None:
-                #     print("Target or tracker position is None. Skipping iteration.")
-                #     break
-                # if target_pos is float("NaN") or tracker_pos is float("NaN"):
-                #     print("Target or tracker position is NaN. Skipping iteration.")
-                #     break
+                if target_pos is None or tracker_pos is None:
+                    logging.error("Target or tracker position is None. Skipping iteration.`n")
+                    continue
 
-                if self.target.body_lost is True or self.tracker.body_lost is True:
-                    print(f"Target or tracker body lost. Skipping iteration.\n")
+                if self.target.lost is True or self.tracker.lost is True:
+                    logging.error(f"Target or tracker body lost. Skipping iteration.\n")
                     continue
 
                 # Get current tracker yaw
@@ -120,12 +117,21 @@ class ServoControl:
 
                 self.set_yaw(control)
 
-                time.sleep(1)
+                time.sleep(0.1)
 
 
             except KeyboardInterrupt:
                 print("Exiting program.")
+
+                # Close serial connection
                 self.ser.close()
+
+                # Close QTM connections
+                self.target._close()
+                self.tracker._close()
+                self.target.close()
+                self.tracker.close()
+
                 return
 
 if __name__ == "__main__":

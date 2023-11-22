@@ -1,8 +1,9 @@
 from threading import Thread
-import asyncio
 from scipy.io import savemat
-import qtm
+import logging
+import asyncio
 import math
+import qtm
 
 
 class MoCap(Thread):
@@ -20,31 +21,27 @@ class MoCap(Thread):
 
         Thread.__init__(self)
 
+        # QTM Connection vars
         self.qtm_ip = qtm_ip
-        self.height = height
-        self.position = position
-        self.rotation = rotation
-        self.state = [0, 0, 0, 0, 0, 0]
-        self.frame = 0
         self.stream_type = stream_type
-        self.component = []
-        self.tracking_loss = 0
-
-        self._body_idx = None
         self._connection = None
         self._stay_open = True
-        self.body_lost = False
-        self.marker_lost = False
+
+        # Kinematic data vars
+        self.state = [0, 0, 0, 0, 0, 0]
+        self.position = position
+        self.rotation = rotation
+        self.lost = False
 
         self.start()
 
-    def run(self):
+    def run(self) -> None:
         """
         Run QTM wrapper coroutine.
         """
         asyncio.run(self._life_cycle())
 
-    async def _life_cycle(self):
+    async def _life_cycle(self) -> None:
         """
         QTM wrapper coroutine.
         """
@@ -53,12 +50,12 @@ class MoCap(Thread):
             await asyncio.sleep(1)
         await self._close()
 
-    async def _connect(self):
+    async def _connect(self) -> None:
         """
         Connect to QTM machine.
         """
         # Establish connection
-        print('[QTM] Connecting to QTM at ' + self.qtm_ip)
+        logging.info('[QTM] Connecting to QTM at %s', self.qtm_ip)
         self._connection = await qtm.connect(self.qtm_ip)
 
         if self.stream_type == '6d':
@@ -68,14 +65,14 @@ class MoCap(Thread):
             # Assign 6D streaming callback
             await self._connection.stream_frames(components=['6DEuler'], on_packet=self._on_packet)
 
-        if self.stream_type == '3d_unlabelled':
+        if self.stream_type == '3d':
             # Register index of body for 6D tracking
             params_xml = await self._connection.get_parameters(parameters=['3d'])
 
             # Assign 6D streaming callback
             await self._connection.stream_frames(components=["3dnolabels"], on_packet=self._on_packet)
 
-    def _on_packet(self, packet):
+    def _on_packet(self, packet) -> None:
         """
         Process 6D packet stream into Pose object and pass on.
         Parameters
@@ -84,48 +81,43 @@ class MoCap(Thread):
             Incoming packet from QTM
         """
         if self.stream_type == '6d':
-            # Extract 6D component from packet
-            header, component_6d = packet.get_6d_euler()
-            self.frame = packet.framenumber
+            # Extract new 6D component from packet
+            header, new_component = packet.get_6d_euler()
 
-            # Increment tracking loss if no component found
-            if component_6d is None:
-                print('[QTM] 6DoF rigid body not found.')
-                self.tracking_loss += 1
-                self.body_lost = True
+            # If no new component: mark as lost and return from function
+            if not new_component:
+                logging.info('[QTM] 6DoF rigid body not found.')
+                self.lost = True
                 return
 
-            pos, rot = component_6d[0]
-            self.component = component_6d
+            pos, rot = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
-            self.height = pos.z
             self.rotation = rot.a3
             self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3]
-            self.body_lost = False
+            self.lost = False
 
-        elif self.stream_type == '3d_unlabelled':
-            # Extract unlabelled 3d component from packet
-            header, component_3d = packet.get_3d_markers_no_label()
-            self.frame = packet.framenumber
+        elif self.stream_type == '3d': 
+            # Extract new unlabelled 3d component from packet
+            header, new_component = packet.get_3d_markers_no_label()
 
-            # Increment tracking loss if no component found
-            if component_3d is None or not component_3d:
-                print('[QTM] 3D Unlabelled marker not found.')
-                self.marker_lost = True
+            # If no new component: mark as lost and return from function
+            if not new_component:
+                logging.info('[QTM] 3D Unlabelled marker not found.')
+                self.lost = True
                 return
 
-            pos = component_3d[0]
+            pos = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
-            self.marker_lost = False
+            self.lost = False
 
-    async def _close(self):
+    async def _close(self) -> None:
         """
         End lifecycle by disconnecting from QTM machine.
         """
         await self._connection.stream_frames_stop()
         self._connection.disconnect()
 
-    def close(self):
+    def close(self) -> None:
         """
         Stop QTM wrapper thread.
         """
