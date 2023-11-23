@@ -26,7 +26,7 @@ class ServoControl:
             self.ser.write(f"{us_val}\n".encode())
             self.us_val = us_val
         else:
-            print(f"Invalid us val {us_val}. Please enter a val between 1000 and 2000.")
+            logging.error("Invalid us val %s. Please enter a val between 1000 and 2000.", us_val)
 
     def calibrate_yaw(self, us_range=(1000, 2000), num_cycles=2, samples_per_cycle=2):
         print(f"------Calibrating servos yaw params for {num_cycles} cycles------\n")
@@ -34,13 +34,13 @@ class ServoControl:
         # Send 1500 us to center the servo and wait for manual center alignment
         self.send_us_val(1500)
         # input("Manually align the servo and press Enter when ready...")
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Cycle over pwm range n times and record min and max yaw values
         for _ in range(num_cycles):
             for us_val in range(us_range[0], us_range[1] + 1, (us_range[1] - us_range[0]) // samples_per_cycle):
                 self.send_us_val(us_val)
-                time.sleep(1)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
+                time.sleep(0.5)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
                 yaw = self.tracker.rotation
                 # Normalize the yaw angle to the range [0, 360]
                 yaw = (yaw + 360) % 360
@@ -54,7 +54,7 @@ class ServoControl:
         print(f"Yaw max: {self.max_yaw} degrees\n")
         print(f"Yaw range: {self.yaw_range} degrees\n")
         print(f"------------------------\n\n")
-        time.sleep(3)
+        time.sleep(1)
 
         return
 
@@ -76,22 +76,16 @@ class ServoControl:
         # Grab positions of target and tracker and wait for small duration to ensure connection to DB
         target_pos = self.target.position
         tracker_pos = self.tracker.position
-        time.sleep(1)
+        time.sleep(0.5)
 
         # Call calibrate yaw function to calibrate the yaw offset
         self.calibrate_yaw()
-        time.sleep(1)
-
-        self.us_val = 1000 # For debug purposes put arbitrary bottom pwm period
+        time.sleep(0.5)
 
         while True:
             try:
-                if target_pos is None or tracker_pos is None:
-                    logging.error("Target or tracker position is None. Skipping iteration.`n")
-                    continue
-
                 if self.target.lost is True or self.tracker.lost is True:
-                    logging.error(f"Target or tracker body lost. Skipping iteration.\n")
+                    logging.error("Target or tracker body lost. Skipping iteration.\n")
                     continue
 
                 # Get current tracker yaw
@@ -117,7 +111,7 @@ class ServoControl:
 
                 self.set_yaw(control)
 
-                time.sleep(0.1)
+                time.sleep(0.001)
 
 
             except KeyboardInterrupt:
