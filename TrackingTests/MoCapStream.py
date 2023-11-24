@@ -86,7 +86,7 @@ class MoCap(Thread):
 
             # If no new component: mark as lost and return from function
             if not new_component:
-                logging.info('[QTM] 6DoF rigid body not found.')
+                logging.WARNING('[QTM] 6DoF rigid body not found.')
                 self.lost = True
                 return
 
@@ -102,7 +102,7 @@ class MoCap(Thread):
 
             # If no new component: mark as lost and return from function
             if not new_component:
-                logging.info('[QTM] 3D Unlabelled marker not found.')
+                logging.WARNING('[QTM] 3D Unlabelled marker not found.')
                 self.lost = True
                 return
 
