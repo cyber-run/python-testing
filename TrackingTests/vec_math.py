@@ -1,6 +1,6 @@
 import numpy as np
 
-def calc_yaw_vec(yaw_angle):
+def calc_yaw_vec(yaw_angle: float) -> np.ndarray:
     # Convert yaw angle to radians
     yaw_rad = np.radians(yaw_angle)
 
@@ -9,7 +9,7 @@ def calc_yaw_vec(yaw_angle):
 
     return yaw_vec
 
-def calc_vec(a, b):
+def calc_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     # Convert the input points to NumPy arrays
     a = np.array([a[0], a[1]])
     b = np.array([b[0], b[1]])
@@ -19,7 +19,7 @@ def calc_vec(a, b):
 
     return target_vec
 
-def vec_ang_delta(vector1, vector2):
+def vec_ang_delta(vector1: np.ndarray, vector2: np.ndarray) -> float:
     # Calculate the angle between two vectors
     dot_product = np.dot(vector1, vector2)
     magnitudes = np.linalg.norm(vector1) * np.linalg.norm(vector2)

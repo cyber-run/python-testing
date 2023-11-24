@@ -10,6 +10,11 @@ import timeit
 import serial
 import time
 
+import os
+import win32api
+import win32process
+import win32con
+
 
 class ServoTracker:
     def __init__(self, port: str = 'COM3', baud_rate: int = 115200, timeout: int = 1) -> None:
@@ -18,7 +23,7 @@ class ServoTracker:
         self.ser = serial.Serial(port, baud_rate, timeout=timeout)
         self.target = MoCap(stream_type='3d')
         self.tracker = MoCap(stream_type='6d')
-        self.pid = PID(0.2, 0.01, 0.05)
+        self.pid = PID(0.35, 0.01, 0.05)
 
         # Servo control params
         self.us_val = 1500
@@ -46,7 +51,7 @@ class ServoTracker:
 
         return
 
-    def calibrate_yaw(self, us_range: Tuple[int, int] = (1000, 2000), num_cycles: int = 2, samples_per_cycle: int = 2) -> None:
+    def calibrate_yaw(self, us_range: Tuple[int, int] = (1000, 2000), num_cycles: int = 1, samples_per_cycle: int = 2) -> None:
         # Grab positions of target and tracker and wait for small duration to ensure connection to DB
         target_pos = self.target.position
         tracker_pos = self.tracker.position
@@ -56,7 +61,7 @@ class ServoTracker:
 
         # Send 1500 us to center the servo and wait for manual center alignment
         self.send_us_val(1500)
-        # input("Manually align the servo and press Enter when ready...")
+        input("Manually align the servo and press Enter when ready...")
         time.sleep(0.5)
 
         # Cycle over pwm range n times and record min and max yaw values
@@ -125,7 +130,7 @@ class ServoTracker:
         logging.info("Angle error: %s", angle_err)
         logging.info("Control: %s", control)
 
-        time.sleep(0.001)
+        time.sleep(0.0001)
 
     def store_data(self) -> None:
             self.data_lists['yaw'].append(self.yaw)
@@ -149,7 +154,14 @@ class ServoTracker:
 
         return
 
+def set_realtime_priority():
+        handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, os.getpid())
+        win32process.SetPriorityClass(handle, win32process.REALTIME_PRIORITY_CLASS) # you could set this to REALTIME_PRIORITY_CLASS etc.
+
 if __name__ == "__main__":
+
+    # Set high priority for process
+    set_realtime_priority()
     
     reload(logging)
     # Set up logging
@@ -164,7 +176,7 @@ if __name__ == "__main__":
     try:
         for _ in count():
             servo_controller.track()
-            servo_controller.store_data()
+            # servo_controller.store_data()
         
     except KeyboardInterrupt:
         logging.info("Exiting program.")
