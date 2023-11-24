@@ -1,37 +1,65 @@
+import logging
+logging.basicConfig(level=logging.CRITICAL) # CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET
 from marker_tracking import ServoTracker
-from scipy.io import savemat
+from marker_tracking import set_realtime_priority
+import time
 
 
-def setup():
-    servo_tracker = ServoTracker()
-    servo_tracker.run()
-
-    # Put marker target code here => probably send a trigger to a pico
-
-    return servo_tracker
 
 if __name__ == "__main__":
-    servo_tracker = setup()
-    error = []
-    time_stamp = []
-    i = 0
+    # Set high priority for process
+    set_realtime_priority()
+
+    # Initialize servo controller
+    servo_tracker = ServoTracker()
 
     try:
-        while True:
+        # Calibrate yaw
+        servo_tracker.calibrate_yaw(delay=0.3)
+
+        servo_tracker.send_us_val(1500)
+
+        time.sleep(1)
+
+        # Start target movement
+        servo_tracker.send_command('s')
+
+        # Set target delay to 1
+        servo_tracker.send_command('1')
+
+        for i in range(1, 6, 1):
+            # Stop target delay
+            servo_tracker.send_command(str(i))
+
+            # Start target movement
+            servo_tracker.send_command('s')
+
+            start = time.perf_counter()
+
+            while time.perf_counter() < start + 8 + i:
+                servo_tracker.track()
+                servo_tracker.store_data()
+
+            # Stop target movement
+            servo_tracker.send_command('x')
+
+            servo_tracker.save_data('data' + str(i))
+
+            time.sleep(2)
+
+            # Empty data
+            servo_tracker.empty_data()
         
-            error[i] = servo_tracker.angle_err()
-            time_stamp[i] = time_stamp.perf_counter()
+        # Stop target movement
+        servo_tracker.send_command('x')
 
-    except KeyboardInterrupt:
-        print("Exiting program.")
-
-        # Close serial connection
-        servo_tracker.ser.close()
-
-        # Close QTM connections
-        servo_tracker.target._close()
-        servo_tracker.tracker._close()
-        servo_tracker.target.close()
-        servo_tracker.tracker.close()
-
+        # Close servo controller
+        servo_tracker.shutdown()
     
+    except KeyboardInterrupt:
+        # Stop target movement
+        servo_tracker.send_command('x')
+
+        # Shutdown I/O interfaces and save recorded data
+        logging.info("Exiting program.")
+        servo_tracker.shutdown()
