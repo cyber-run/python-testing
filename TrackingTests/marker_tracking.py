@@ -2,6 +2,7 @@ from PID import PID_controller as PID
 from MoCapStream import MoCap
 from importlib import reload
 from scipy.io import savemat
+import numpy as np
 from itertools import count
 from typing import Tuple
 import vec_math as vm
@@ -23,7 +24,7 @@ class ServoTracker:
         self.ser = serial.Serial(port, baud_rate, timeout=timeout)
         self.target = MoCap(stream_type='3d')
         self.tracker = MoCap(stream_type='6d')
-        self.pid = PID(0.35, 0.01, 0.05)
+        self.pid = PID(0.9, 0.01, 0.05)
 
         # Servo control params
         self.us_val = 1500
@@ -50,40 +51,50 @@ class ServoTracker:
             logging.error("Invalid us val %s. Please enter a val between 1000 and 2000.", us_val)
 
         return
+    
+    def send_command(self, command: str) -> None:
+        '''
+        Function to send general commands over serial to micro controller.
+        - Sending a number 1-50 to set the delay of the target movement:
+            - ie 1 = 1ms delay, 50 = 50ms delay, where less delay is faster movement
+        - Sending the character s or x will start or stop the target movement
+        '''
+        self.ser.write(f"{command}\n".encode())
+        return
 
     def calibrate_yaw(self, us_range: Tuple[int, int] = (1000, 2000), num_cycles: int = 1, samples_per_cycle: int = 2) -> None:
         # Grab positions of target and tracker and wait for small duration to ensure connection to DB
         target_pos = self.target.position
         tracker_pos = self.tracker.position
-        time.sleep(0.5)
+        time.sleep(0.3)
 
-        print(f"------Calibrating servos yaw params for {num_cycles} cycles------\n")
+        print(f"\n------Calibrating servos yaw params for {num_cycles} cycles------")
 
         # Send 1500 us to center the servo and wait for manual center alignment
         self.send_us_val(1500)
         input("Manually align the servo and press Enter when ready...")
-        time.sleep(0.5)
+        time.sleep(0.3)
 
         # Cycle over pwm range n times and record min and max yaw values
         for _ in range(num_cycles):
             for us_val in range(us_range[0], us_range[1] + 1, (us_range[1] - us_range[0]) // samples_per_cycle):
                 self.send_us_val(us_val)
-                time.sleep(0.5)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
+                time.sleep(0.3)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
                 yaw = self.tracker.rotation
+
                 # Normalize the yaw angle to the range [0, 360]
                 yaw = (yaw + 360) % 360
-                # print(f'Yaw: {yaw} degrees\n')
                 self.min_yaw = min(self.min_yaw, yaw)
                 self.max_yaw = max(self.max_yaw, yaw)
 
         self.yaw_range = self.max_yaw - self.min_yaw  # Calculate the range as the difference between max and min
 
-        print(f"Yaw min: {self.min_yaw} degrees\n")
-        print(f"Yaw max: {self.max_yaw} degrees\n")
-        print(f"Yaw range: {self.yaw_range} degrees\n")
-        print(f"------------------------\n\n")
+        logging.info("Yaw min: %s degrees\n", self.min_yaw)
+        logging.info("Yaw max: %s degrees\n", self.max_yaw)
+        logging.info("Yaw range: %s degrees\n", self.max_yaw)
+        logging.info("------------------------\n")
 
-        time.sleep(0.5)
+        time.sleep(0.3)
 
         return
 
@@ -137,10 +148,11 @@ class ServoTracker:
             self.data_lists['angle error'].append(self.angle_err)
             self.data_lists['time stamp'].append(time.perf_counter())
 
-    def save_data(self, filename: str = 'data.mat') -> None:
+    def save_data(self, filename: str = 'data') -> None:
         first_time = self.data_lists['time stamp'][0]
         self.data_lists['time stamp'] = [t - first_time for t in self.data_lists['time stamp']]
-        savemat(filename, self.data_lists)
+        savemat(filename + '.mat', self.data_lists)
+        np.save(filename, self.data_lists)
 
     def shutdown(self) -> None:
         # Close serial connection
@@ -165,24 +177,37 @@ if __name__ == "__main__":
     
     reload(logging)
     # Set up logging
-    logging.basicConfig(level=logging.ERROR)
+    logging.basicConfig(level=logging.CRITICAL)
 
     # Initialize servo controller
     servo_controller = ServoTracker()
 
     # Calibrate yaw
     servo_controller.calibrate_yaw()
+
+    # Start target movement
+    servo_controller.send_command('s')
+
+    servo_controller.send_command('1')
     
     try:
         for _ in count():
             servo_controller.track()
-            # servo_controller.store_data()
+            servo_controller.store_data()
         
     except KeyboardInterrupt:
+        # Stop target movement
+        servo_controller.send_command('x')
+
+        # Shutdown I/O interfaces and save recorded data
         logging.info("Exiting program.")
         servo_controller.shutdown()
         servo_controller.save_data()
 
     except Exception as e:
+        # Stop target movement
+        servo_controller.send_command('x')
+
+        # Log error and shutdown I/O interfaces
         logging.error(f"An error occurred: {e}")
         servo_controller.shutdown()
