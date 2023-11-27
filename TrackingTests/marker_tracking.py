@@ -154,16 +154,18 @@ class ServoTracker:
 
         time.sleep(delay)
 
-    def store_data(self) -> None:
-            self.data_lists['yaw'].append(self.yaw)
-            self.data_lists['angle error'].append(self.angle_err)
-            self.data_lists['time stamp'].append(time.perf_counter())
+    def store_data(self, yaw, angle_err) -> None:
+        self.data_lists['yaw'].append(yaw)
+        self.data_lists['angle error'].append(angle_err)
+        self.data_lists['time stamp'].append(perf_counter())
 
     def save_data(self, filename: str = 'data') -> None:
-        first_time = self.data_lists['time stamp'][0]
-        self.data_lists['time stamp'] = [t - first_time for t in self.data_lists['time stamp']]
-        savemat(filename + '.mat', self.data_lists)
-        np.save(filename, self.data_lists)
+        time_stamp = np.array(self.data_lists['time stamp'])
+        time_stamp -= time_stamp[0]
+
+        for key in self.data_lists.keys():
+            savemat(f"{filename}{key}.mat", np.array(self.data_lists[key]))
+            np.save(f"{filename}{key}", np.array(self.data_lists[key]))
 
     def empty_data(self) -> None:
         self.data_lists = {
