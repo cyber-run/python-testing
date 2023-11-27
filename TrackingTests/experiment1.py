@@ -1,5 +1,5 @@
 import logging
-logging.basicConfig(level=logging.CRITICAL) # CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET
+logging.basicConfig(level=logging.ERROR) # CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET
 from marker_tracking import ServoTracker
 from marker_tracking import set_realtime_priority
 import time
@@ -27,7 +27,7 @@ if __name__ == "__main__":
         # Set target delay to 1
         servo_tracker.send_command('1')
 
-        for i in range(1, 6, 1):
+        for i in range(5, 0, -1):
             # Stop target delay
             servo_tracker.send_command(str(i))
 

@@ -39,8 +39,8 @@ class ServoTracker:
         # Lists for storing data for saving to file
         self.data_lists = {
             'yaw': [],
-            'angle error': [],
-            'time stamp': []
+            'angle_error': [],
+            'time_stamp': []
         }
 
     def send_us_val(self, us_val: int) -> None:
@@ -110,7 +110,7 @@ class ServoTracker:
         
         return
     
-    def track(self, delay: int = 0.001, direction: int = 1) -> None:
+    def track(self, delay: int = 0.0005, direction: int = 1) -> None:
         '''
         Main tracking function
 
@@ -154,24 +154,43 @@ class ServoTracker:
 
         time.sleep(delay)
 
-    def store_data(self, yaw, angle_err) -> None:
-        self.data_lists['yaw'].append(yaw)
-        self.data_lists['angle error'].append(angle_err)
-        self.data_lists['time stamp'].append(perf_counter())
+    def store_data(self) -> None:
+        self.data_lists['yaw'].append(self.yaw)
+        self.data_lists['angle_error'].append(self.angle_err)
+        self.data_lists['time_stamp'].append(time.perf_counter())
+
 
     def save_data(self, filename: str = 'data') -> None:
-        time_stamp = np.array(self.data_lists['time stamp'])
+        # Create the "temp" directory if it doesn't exist
+        temp_dir = 'temp'
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Create a directory based on the filename inside the "temp" directory
+        output_dir = os.path.join(temp_dir, filename)
+        os.makedirs(output_dir, exist_ok=True)
+
+        time_stamp = np.array(self.data_lists['time_stamp'])
         time_stamp -= time_stamp[0]
 
         for key in self.data_lists.keys():
-            savemat(f"{filename}{key}.mat", np.array(self.data_lists[key]))
-            np.save(f"{filename}{key}", np.array(self.data_lists[key]))
+            variable_name = f"{filename}{key}"
+            variable_value = np.array(self.data_lists[key])
+
+            # Create a dictionary with the variable name and value
+            mdict = {variable_name: variable_value}
+
+            # Save files in the directory based on the filename inside the "temp" directory
+            mat_file_path = os.path.join(output_dir, f"{filename}{key}.mat")
+            savemat(mat_file_path, mdict)
+
+            # npy_file_path = os.path.join(output_dir, f"{filename}{key}.npy")
+            # np.save(npy_file_path, variable_value)
 
     def empty_data(self) -> None:
         self.data_lists = {
             'yaw': [],
-            'angle error': [],
-            'time stamp': []
+            'angle_error': [],
+            'time_stamp': []
         }
 
     def shutdown(self) -> None:
