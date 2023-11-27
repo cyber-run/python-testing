@@ -1,12 +1,14 @@
+from MarkerTracking import ServoTracker, set_realtime_priority
+from importlib import reload
 import logging
-logging.basicConfig(level=logging.ERROR) # CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET
-from marker_tracking import ServoTracker
-from marker_tracking import set_realtime_priority
 import time
 
 
-
 if __name__ == "__main__":
+
+    reload(logging)
+    logging.basicConfig(level=logging.ERROR)
+
     # Set high priority for process
     set_realtime_priority()
 
