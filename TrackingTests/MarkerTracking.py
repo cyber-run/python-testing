@@ -24,7 +24,7 @@ class ServoTracker:
         self.ser = serial.Serial(port, baud_rate, timeout=timeout)
         self.target = MoCap(stream_type='3d')
         self.tracker = MoCap(stream_type='6d')
-        self.pid = PID(0.25, 0.01, 0.05)
+        self.pid = PID(0.2, 0, 0)
 
         # Servo control params
         self.us_val = 1500
@@ -219,23 +219,23 @@ if __name__ == "__main__":
     
     
     reload(logging)
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.CRITICAL)
 
     # Initialize servo controller
     servo_controller = ServoTracker()
 
     # Calibrate yaw
-    servo_controller.calibrate_yaw()
+    servo_controller.calibrate_yaw(num_cycles=1)
 
     # Start target movement
     servo_controller.send_command('s')
 
-    servo_controller.send_command('4')
+    servo_controller.send_command('13.3')
     
     try:
         for _ in count():
-            servo_controller.track(0.1)
-            servo_controller.store_data()
+            servo_controller.track(0.0005, direction=-1)
+            # servo_controller.store_data()
         
     except KeyboardInterrupt:
         # Stop target movement
