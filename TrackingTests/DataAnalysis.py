@@ -1,4 +1,5 @@
 from scipy.signal import hanning, savgol_filter, hilbert
+from matplotlib.ticker import LogLocator
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -203,6 +204,13 @@ def plot_bode(freq, gain_dB, phase, title, save_path='temp'):
     ax2.semilogx(freq, phase, 'x-')
     ax2.tick_params(axis='y')
     ax2.grid(True, which='both', linestyle='--', linewidth=0.5)  # Add grid lines
+
+    # Set major and minor ticks on x-axis
+    major_locator = LogLocator(base=10.0, numticks=12)
+    minor_locator = LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=12)
+    ax2.xaxis.set_major_locator(major_locator)
+    ax2.xaxis.set_minor_locator(minor_locator)
+    ax2.xaxis.set_minor_formatter(plt.NullFormatter())
 
     fig.suptitle(title)
 

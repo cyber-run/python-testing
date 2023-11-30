@@ -13,8 +13,8 @@ def main():
     logging.basicConfig(level=logging.ERROR)
 
     # Set the frequency range for the Bode plot
-    start_freq = 0.4
-    end_freq = 4.0
+    start_freq = 0.1
+    end_freq = 1.33
     num_points = 20
 
     frequencies = np.round(np.logspace(np.log10(start_freq), np.log10(end_freq), num_points), 3)
@@ -27,7 +27,7 @@ def main():
 
     try:
         # Calibrate yaw
-        servo_tracker.calibrate_yaw(delay=0.3)
+        servo_tracker.calibrate_yaw(delay=0.3, num_cycles=1)
 
         # Create lists to store data for Bode plot
         amplitude_data = []
@@ -64,7 +64,7 @@ def main():
             tracker_yaw, target_yaw, amplitude, phase = analyze_data(data_filename, (1 / frequency) )
 
             # Average phase difference over the 5 periods
-            phase = -np.mean(phase)
+            phase = -abs(np.mean(phase))
 
             print(f'----Frequency: {frequency} Hz----')
             print(f'Amplitude: {amplitude} (gain)')
