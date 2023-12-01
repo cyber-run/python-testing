@@ -14,6 +14,6 @@
 
 - [ ] Implement Dynamixel in experiment
 
-- [ ] Integrate tinymovr sdk
+- [x] Integrate tinymovr sdk
 
 - [ ] Implement tinymovr in experiment
