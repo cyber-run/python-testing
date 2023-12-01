@@ -127,8 +127,8 @@ def hillbert_phase(tracker_yaw, target_yaw):
     - numpy.ndarray: Phase difference information.
     """
 
-    analytic_x = signal.hilbert(tracker_yaw)
-    analytic_y = signal.hilbert(target_yaw)
+    analytic_x = hilbert(tracker_yaw)
+    analytic_y = hilbert(target_yaw)
 
     phase_x = np.angle(tracker_yaw)
     phase_y = np.angle(target_yaw)

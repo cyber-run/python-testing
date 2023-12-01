@@ -1,16 +1,15 @@
-from PID import PID_controller as PID
-from MoCapStream import MoCap
+from mocap_stream import MoCap
 from importlib import reload
-from scipy.io import savemat
-import numpy as np
 from itertools import count
 from typing import Tuple
 import vec_math as vm
+from pid import PID
+import numpy as np
 import logging
-import timeit
 import serial
 import time
 
+# System imports
 import os
 import win32api
 import win32process
@@ -26,15 +25,15 @@ class ServoTracker:
         self.tracker = MoCap(stream_type='6d')
         self.pid = PID(0.2, 0, 0)
 
+        # MOCAP tracking params
+        self.angle_err = 0
+        self.yaw = 0
+
         # Servo control params
         self.us_val = 1500
-        self.angle_err = 0
-
-        # Yaw calibration/control params
         self.min_yaw = float('inf')
         self.max_yaw = float('-inf')
         self.yaw_range = 0
-        self.yaw = 0
 
         # Lists for storing data for saving to file
         self.data_lists = {
@@ -180,12 +179,6 @@ class ServoTracker:
                 variable_value -= variable_value[0]
                 variable_value = np.around(variable_value, decimals=5)
 
-            # # Create a dictionary with the variable name and value
-            # mdict = {variable_name: variable_value}
-            # # Save files in the directory based on the filename inside the "temp" directory
-            # mat_file_path = os.path.join(output_dir, f"{key}.mat")
-            # savemat(mat_file_path, mdict)
-
             npy_file_path = os.path.join(output_dir, f"{key}.npy")
             np.save(npy_file_path, variable_value)
 
@@ -217,6 +210,7 @@ if __name__ == "__main__":
     # Set high priority for process
     set_realtime_priority()
     
+    # Reload logging package so level can be declared here w/o conflict
     reload(logging)
     logging.basicConfig(level=logging.CRITICAL)
 

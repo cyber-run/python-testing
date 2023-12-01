@@ -1,8 +1,6 @@
-
-from MarkerTracking import ServoTracker, set_realtime_priority
-from DataAnalysis import analyze_data, plot_bode
-import matplotlib.pyplot as plt
 from importlib import reload
+from servo_tracker import *
+from data_analysis import *
 import numpy as np
 import logging
 import time

@@ -1,5 +1,5 @@
-from MarkerTracking import ServoTracker, set_realtime_priority
 from importlib import reload
+from servo_tracker import *
 import logging
 import time
 
