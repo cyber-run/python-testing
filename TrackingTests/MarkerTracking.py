@@ -217,7 +217,6 @@ if __name__ == "__main__":
     # Set high priority for process
     set_realtime_priority()
     
-    
     reload(logging)
     logging.basicConfig(level=logging.CRITICAL)
 
