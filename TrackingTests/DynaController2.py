@@ -55,7 +55,9 @@ class DynaController:
         - pos (float): Desired position in degrees.
         '''
         # Convert from degrees to encoder position
-        pos = int(pos * 4096 / 360)
+        pos = int(pos * 4095 / 360)
+
+        print(f"Setting position to {pos} ticks")
 
         # Write to servo
         self.write4ByteData(self.ADDR_X_GOAL_POSITION, pos)
@@ -65,10 +67,10 @@ class DynaController:
         pos = self.read4ByteData(self.ADDR_X_PRESENT_POSITION)
 
         # Convert to signed 32-bit integer
-        pos = DynaController.to_signed32(pres_pos)
+        pos = DynaController.to_signed32(pos)
 
         # Convert to degrees
-        pos = round(360 * (pres_pos / 4096), 3)
+        pos = round(360 * (pos / 4095), 3)
 
         return pos
     
@@ -96,6 +98,42 @@ class DynaController:
         vel = vel / 41.7
 
         return vel
+    
+    def set_torque(self, torque: bool = False) -> None:
+        '''
+        Enable/disable servo torque.
+
+        Parameters:
+        - torque (bool): True to enable torque, False to disable.
+        '''
+        self.write1ByteData(self.ADDR_X_TORQUE_ENABLE, int(torque))
+
+        check = self.read1ByteData(self.ADDR_X_TORQUE_ENABLE)
+
+        if check == int(torque):
+            return True
+        else:
+            return False
+
+    def set_op_mode(self, mode: int = 3) -> bool:
+        '''
+        Set servo operating mode.
+
+        Parameters:
+        - mode (int): Operating mode to set. 3 => position control, 1 => velocity control.
+        '''
+
+        # Set the operating mode
+        self.write1ByteData(self.ADDR_X_OPERATING_MODE, mode)
+
+        # Verify that the operating mode was set correctly
+        check = self.read1ByteData(self.ADDR_X_OPERATING_MODE)
+
+        # Return True if the operating mode was set correctly, False otherwise
+        if check == mode:
+            return True
+        else:
+            return False
 
     def write1ByteData(self, address, value):
         dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, self.DXL_ID, address, value)
@@ -153,47 +191,56 @@ if __name__ == '__main__':
     dyna = DynaController()
 
     if dyna.open_port():
-        dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 0)
+        # Port opened
+        print("Port opened successfully\n")
 
-        velocity_limit = dyna.read4ByteData(dyna.ADDR_X_VELOCITY_LIMIT)
-        print(f"Velocity limit: {velocity_limit}\n")
+        # Set torque to false to allow for EEPROM writes
+        print(f"Torque turned off : {dyna.set_torque(False)}")
 
-        dyna.write1ByteData(dyna.ADDR_X_OPERATING_MODE, 3)
-        operating_mode = dyna.read1ByteData(dyna.ADDR_X_OPERATING_MODE)
-        print(f"Operating mode: {operating_mode}\n")
+        print(f"Set operating mode to position: {dyna.set_op_mode(3)}\n")
 
-        dyna.write4ByteData(dyna.ADDR_X_GOAL_VELOCITY, 0)
-        dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 1)
+        print(f"Torque turned on : {dyna.set_torque(True)}")
 
+        print("Moving to 0 degrees\n")
+        dyna.set_pos(0)
+
+        time.sleep(3)
+
+        print("Moving to 360 degrees\n")
+        dyna.set_pos(360)
+
+        time.sleep(3)
+
+        print("Moving to 180 degrees\n")
         dyna.calibrate_position()
 
         start_pos = dyna.read4ByteData(dyna.ADDR_X_PRESENT_POSITION)
 
-        try:
-            vel = 100
-            while True:
-                vel = -vel
-                dyna.write4ByteData(dyna.ADDR_X_GOAL_VELOCITY, vel)
-                time.sleep(4)
+        # try:
+        #     vel = 100
+        #     while True:
+        #         vel = -vel
+        #         dyna.write4ByteData(dyna.ADDR_X_GOAL_VELOCITY, vel)
+        #         time.sleep(4)
 
-                pres_pos = start_pos - dyna.read4ByteData(dyna.ADDR_X_PRESENT_POSITION)
-                if pres_pos is not None:
-                    pres_angle = DynaController.to_signed32(pres_pos)
-                    pres_angle = round(360 * (pres_pos / 4096), 3)
-                    print(f"Current position: {pres_angle} degrees")
+        #         pres_pos = start_pos - dyna.read4ByteData(dyna.ADDR_X_PRESENT_POSITION)
+        #         if pres_pos is not None:
+        #             pres_angle = DynaController.to_signed32(pres_pos)
+        #             pres_angle = round(360 * (pres_pos / 4096), 3)
+        #             print(f"Current position: {pres_angle} degrees")
 
-                pres_vel = dyna.read4ByteData(dyna.ADDR_X_PRESENT_VELOCITY)
-                if pres_vel is not None:
-                    pres_vel = DynaController.to_signed32(pres_vel)
-                    print(f"Current velocity: {pres_vel}\n")
+        #         pres_vel = dyna.read4ByteData(dyna.ADDR_X_PRESENT_VELOCITY)
+        #         if pres_vel is not None:
+        #             pres_vel = DynaController.to_signed32(pres_vel)
+        #             print(f"Current velocity: {pres_vel}\n")
 
-        except KeyboardInterrupt:
-            print("Interrupted by user")
-            dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 0)
-            dyna.close_port()
+        # except KeyboardInterrupt:
+        #     print("Interrupted by user")
+        #     dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 0)
+        #     dyna.close_port()
 
-        except Exception as e:
-            print(f"Error during operation: {e}")
-            dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 0)
-            dyna.close_port()
+        # except Exception as e:
+        #     print(f"Error during operation: {e}")
+        #     dyna.write1ByteData(dyna.ADDR_X_TORQUE_ENABLE, 0)
+        #     dyna.close_port()
 
