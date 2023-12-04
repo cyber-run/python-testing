@@ -51,3 +51,10 @@ def vec_ang_delta(vector1: np.ndarray, vector2: np.ndarray) -> float:
         angle_deg = -180 - angle_deg
 
     return angle_deg
+
+
+def vec_to_angle(vector: np.ndarray) -> float:
+    """ Convert a 2D vector to an angle in the range 0 to 360 degrees. """
+    angle = np.degrees(np.arctan2(vector[1], vector[0]))
+    # Normalize the angle to be within 0 to 360 degrees
+    return angle % 360

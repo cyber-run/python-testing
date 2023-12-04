@@ -210,7 +210,7 @@ class DynaController:
 
     def calibrate_position(self):
 
-        self.write4ByteData(self.ADDR_X_GOAL_POSITION, 180)
+        self.set_pos(180)
 
         print("Calibrating position:")
         input("Manually align the servo and press Enter when ready.")
@@ -233,17 +233,19 @@ if __name__ == '__main__':
 
         print(f"Torque turned on : {dyna.set_torque(True)}")
 
-        print("Moving to 0 degrees\n")
+        print("\nMoving to 0 degrees:")
         dyna.set_pos(0)
+        time.sleep(2)
+        print(f"Current position: {dyna.get_pos()}")
 
-        time.sleep(3)
-
-        print("Moving to 360 degrees\n")
+        print("\nMoving to 360 degrees:")
         dyna.set_pos(360)
+        time.sleep(2)
+        print(f"Current position: {dyna.get_pos()}")
 
-        time.sleep(3)
-
-        print("Moving to 180 degrees\n")
+        print("\nMoving to 180 degrees:")
         dyna.calibrate_position()
+        time.sleep(2)
+        print(f"Current position: {dyna.get_pos()}")
 
         start_pos = dyna.read4ByteData(dyna.ADDR_X_PRESENT_POSITION)

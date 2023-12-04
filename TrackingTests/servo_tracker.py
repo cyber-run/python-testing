@@ -126,7 +126,7 @@ class ServoTracker:
         # Get current tracker yaw
         tracker_yaw = self.tracker.rotation
 
-        # Calculate current tracker yaw angle
+        # Calculate current tracker yaw vector
         yaw_vec = vm.calc_yaw_vec(tracker_yaw)
 
         # Get current positions of target and tracker

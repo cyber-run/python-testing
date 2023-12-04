@@ -3,23 +3,24 @@ from importlib import reload
 from dyna_controller import *
 from mocap_stream import *
 import vec_math as vm
-from pid import PID
 import logging
 import time
 
 
 class DynaTracker:
-    def __init__(self):
+    def __init__(self, com_port='COM5'):
 
         # I/O interface params
-        self.dyna = DynaController(com_port='COM5')
+        self.dyna = DynaController(com_port)
+        time.sleep(0.5)
+
         self.target = MoCap(stream_type='3d')
         self.tracker = MoCap(stream_type='6d')
+        time.sleep(1)
 
         # Marker tracking params
-        self.angle_err = 0
-        self.yaw = 0
-        self.pid = PID(0.2, 0, 0)
+        self.target_angle = 0
+        self.curr_angle = 0
 
         # Set torque to false to allow for EEPROM writes
         self.dyna.set_torque(False)
@@ -29,25 +30,64 @@ class DynaTracker:
         self.dyna.set_op_mode(3)
         logging.info("Get operating mode: %s", self.dyna.get_op_mode())
 
+        # Set torque to true to allow for position control
+        self.dyna.set_torque(True)
+
+        # Set the dynamixel to its initial 180 degree position ie centre range
+        self.dyna.calibrate_position()
+        # Allow time for calibration to complete
+        time.sleep(1)
+
+        # Record the mocap yaw value at this calibrated position
+        self.ref_yaw = self.tracker.rotation
+        # Calculate the yaw vector of this centre reference
+        self.ref_yaw_vec = vm.calc_yaw_vec(self.ref_yaw)
+
+        # Store the current yaw centre position for angle calcs
+        self.servo_angle_centre = self.dyna.get_pos()
+
+        # Get the current tracker position for angle calcs
+        self.tracker_pos = self.tracker.position
+
 
     def track(self):
-        # Get target position
-        target_pos = self.target.get_position()
+        if self.target.lost:
+            logging.info("Target lost. Skipping iteration.")
+            return
 
-        # Get tracker position
-        tracker_pos = self.tracker.get_position()
+        # Get target and tracker positions
+        target_pos = self.target.position
 
-        # Calculate angle error
-        self.angle_err = vm.get_angle_error(target_pos, tracker_pos)
+        # Calculate the target vector
+        target_vec = vm.calc_vec(target_pos, self.tracker_pos)
 
-        # Send yaw to servo
-        self.dyna.set_position(self.yaw)
+        # Calculate the angle error
+        self.target_angle = vm.vec_ang_delta(target_vec, self.ref_yaw_vec)
+        logging.info("Target angle: %s", self.target_angle)
 
-        # Print yaw and angle error
-        logging.info("Yaw: %s, Angle Error: %s", self.yaw, self.angle_err)
+        # Adjust the servo position based on the angle error
+        self.curr_angle = (self.servo_angle_centre - self.target_angle) % 360
+
+        self.dyna.set_pos(self.curr_angle)
+        logging.info("Adjusting angle to: %s", self.curr_angle)
+
+
+    def shutdown(self) -> None:
+        self.target._close()
+        self.tracker._close()
+    
+        # Close QTM connections
+        self.target.close()
+        self.tracker.close()
+
+        self.dyna.set_torque(False)
+        logging.info("Get torque status: %s", self.dyna.get_torque())
+        # Close serial port
+        self.dyna.close_port()
 
         return
     
+
 if __name__ == '__main__':
     reload(logging)
     logging.basicConfig(level=logging.ERROR)
@@ -67,33 +107,16 @@ if __name__ == '__main__':
 
         dyna_tracker.dyna.set_torque(True)
 
-        # Calibrate position
-        dyna_tracker.dyna.calibrate_position()
-
-        start_time = time.perf_counter()
-
-        for i in range(0, 360, 1):
-
-            dyna_tracker.dyna.set_pos(i)
-
-        end_time = time.perf_counter()
-
-        time_elapsed = end_time - start_time
-
-        print(f"Time elapsed: {time_elapsed}")
-
-        print(f"Time per tx: {1000*(time_elapsed/360)}")
+        while True:
+            dyna_tracker.track()
 
     except KeyboardInterrupt:
-        dyna_tracker.target.close()
-        dyna_tracker.tracker.close()
-        dyna_tracker.dyna.close_port()
+        dyna_tracker.shutdown()
         print("Port closed successfully\n")
         sys.exit(0)
 
     except Exception as e:
-        dyna_tracker.target.close()
-        dyna_tracker.tracker.close()
-        dyna_tracker.dyna.close_port()
+        dyna_tracker.shutdown()
         print(f"An error occurred: {e}")
         sys.exit(1)
+        
