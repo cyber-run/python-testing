@@ -2,3 +2,4 @@ _*
 !_dependancies
 .*
 venv312/
+venv*

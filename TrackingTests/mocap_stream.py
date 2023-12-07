@@ -8,11 +8,11 @@ import qtm
 
 class MoCap(Thread):
 
-    def __init__(self, position=[0,0], rotation=0, height=0, qtm_ip="192.168.100.1", stream_type='6d'):
+    def __init__(self, qtm_ip="192.168.100.1", stream_type='6d'):
         """
         Constructs QtmWrapper object
         :param position: 6D body position
-        :param rotation: 6D body rotation
+        :param yaw: 6D body yaw
         :param height: For drone altitude control
         :param qtm_ip: IP of QTM instance, but doesn't seem to matter
         :param stream_type: Specify components to receive,
@@ -29,8 +29,9 @@ class MoCap(Thread):
 
         # Kinematic data vars
         self.state = [0, 0, 0, 0, 0, 0]
-        self.position = position
-        self.rotation = rotation
+        self.position = [0,0]
+        self.yaw = 0
+        self.pitch = 0
         self.lost = False
 
         self.start()
@@ -92,7 +93,8 @@ class MoCap(Thread):
 
             pos, rot = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
-            self.rotation = rot.a3
+            self.pitch = rot.a2
+            self.yaw = rot.a3
             self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3]
             self.lost = False
 

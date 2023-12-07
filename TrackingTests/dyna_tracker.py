@@ -3,6 +3,7 @@ from importlib import reload
 from dyna_controller import *
 from mocap_stream import *
 import vec_math as vm
+import cProfile
 import logging
 import time
 
@@ -13,10 +14,6 @@ class DynaTracker:
         # I/O interface params
         self.dyna = DynaController(com_port)
         time.sleep(0.5)
-
-        self.target = MoCap(stream_type='3d')
-        self.tracker = MoCap(stream_type='6d')
-        time.sleep(1)
 
         # Marker tracking params
         self.target_angle = 0
@@ -33,17 +30,20 @@ class DynaTracker:
         # Set torque to true to allow for position control
         self.dyna.set_torque(True)
 
-        # Set the dynamixel to its initial 180 degree position ie centre range
+        # # Set the dynamixel to its initial 180 degree position ie centre range
         self.dyna.calibrate_position()
-        # Allow time for calibration to complete
+
+        # Connect to QTM; init tracker and target
+        self.target = MoCap(stream_type='3d')
+        self.tracker = MoCap(stream_type='6d')
         time.sleep(1)
 
-        # Record the mocap yaw value at this calibrated position
-        self.ref_yaw = self.tracker.rotation
-        # Calculate the yaw vector of this centre reference
-        self.ref_yaw_vec = vm.calc_yaw_vec(self.ref_yaw)
+        # Record the mocap pitch value at this calibrated position
+        self.ref_pitch = self.tracker.pitch
+        # Calculate the pitch vector of this centre reference
+        self.ref_pitch_vec = vm.calc_pitch_vec(float(self.ref_pitch))
 
-        # Store the current yaw centre position for angle calcs
+        # Store the current pitch centre position for angle calcs
         self.servo_angle_centre = self.dyna.get_pos()
 
         # Get the current tracker position for angle calcs
@@ -59,10 +59,10 @@ class DynaTracker:
         target_pos = self.target.position
 
         # Calculate the target vector
-        target_vec = vm.calc_vec(target_pos, self.tracker_pos)
+        target_vec = vm.calc_elv_vec(target_pos, self.tracker_pos)
 
         # Calculate the angle error
-        self.target_angle = vm.vec_ang_delta(target_vec, self.ref_yaw_vec)
+        self.target_angle = vm.vec_ang_delta(target_vec, self.ref_pitch_vec)
         logging.info("Target angle: %s", self.target_angle)
 
         # Adjust the servo position based on the angle error
@@ -88,7 +88,7 @@ class DynaTracker:
         return
     
 
-if __name__ == '__main__':
+def main() -> None:
     reload(logging)
     logging.basicConfig(level=logging.ERROR)
 
@@ -109,6 +109,7 @@ if __name__ == '__main__':
 
         while True:
             dyna_tracker.track()
+            # time.sleep(0.1)
 
     except KeyboardInterrupt:
         dyna_tracker.shutdown()
@@ -119,4 +120,9 @@ if __name__ == '__main__':
         dyna_tracker.shutdown()
         print(f"An error occurred: {e}")
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    # cProfile.run('main()')
+    main()
         

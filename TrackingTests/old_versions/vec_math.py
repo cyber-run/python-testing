@@ -9,29 +9,10 @@ def calc_yaw_vec(yaw_angle: float) -> np.ndarray:
 
     return yaw_vec
 
-def calc_pitch_vec(pitch_angle: float) -> np.ndarray:
-    # Convert pitch angle to radians
-    pitch_rad = np.radians(pitch_angle)
-
-    # Convert pitch angle to y and z components
-    pitch_vec = np.array([np.sin(pitch_rad), np.cos(pitch_rad)])
-
-    return pitch_vec
-
-def calc_azi_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def calc_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     # Convert the input points to NumPy arrays
     a = np.array([a[0], a[1]])
     b = np.array([b[0], b[1]])
-
-    # Calculate the vector between the two points
-    target_vec = a - b
-
-    return target_vec
-
-def calc_elv_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    # Convert the input points to NumPy arrays
-    a = np.array([a[0], a[2]])
-    b = np.array([b[0], b[2]])
 
     # Calculate the vector between the two points
     target_vec = a - b

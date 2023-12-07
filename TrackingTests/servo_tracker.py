@@ -79,7 +79,7 @@ class ServoTracker:
             for us_val in range(us_range[0], us_range[1] + 1, (us_range[1] - us_range[0]) // samples_per_cycle):
                 self.send_us_val(us_val)
                 time.sleep(delay)  # Adjust sleep time as needed, small delay to be sure qualisys data pulled in correct
-                yaw = self.tracker.rotation
+                yaw = self.tracker.yaw
 
                 # Normalize the yaw angle to the range [0, 360]
                 if -90 < yaw < -180:
@@ -124,7 +124,7 @@ class ServoTracker:
             return
 
         # Get current tracker yaw
-        tracker_yaw = self.tracker.rotation
+        tracker_yaw = self.tracker.yaw
 
         # Calculate current tracker yaw vector
         yaw_vec = vm.calc_yaw_vec(tracker_yaw)
@@ -134,7 +134,7 @@ class ServoTracker:
         tracker_pos = self.tracker.position
 
         # Calculate the vector between the target and tracker
-        target_vec = vm.calc_vec(target_pos, tracker_pos)
+        target_vec = vm.calc_azi_vec(target_pos, tracker_pos)
 
         # Calculate the angle between the target vector and the yaw vector
         angle_err = vm.vec_ang_delta(target_vec, yaw_vec)
