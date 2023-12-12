@@ -1,10 +1,12 @@
-import cv2
-import EasyPySpin
+from PIL import Image, ImageTk
 import customtkinter as ctk
 import tkinter as tk
-from PIL import Image, ImageTk
-import os
+import EasyPySpin
+import logging
 import time
+import cv2
+import os
+
 
 class CameraApp:
     def __init__(self, window, window_title):
@@ -55,21 +57,21 @@ class CameraApp:
             os.makedirs(self.image_folder)
 
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)  # Handle window close event
-        self.window.mainloop()
+
+        self.window.mainloop() # Start the GUI
+
 
     def adjust_exposure(self, exposure_value):
-        # Here you would call the method to set the camera's exposure
-        # The exact method will depend on your camera's API; you might need to do some conversion
-        # from the slider value (which is a float) to whatever your camera expects.
-        # This example assumes your camera's API has a 'set_exposure' method and expects milliseconds.
-
         try:
-            exposure_ms = float(exposure_value)  # Convert the slider value to a float
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_ms)
-            self.exposure_label.configure(text=f"Exposure (us): {exposure_ms}")
+            exposure_us = float(exposure_value)  # Convert the slider value to a float
+
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_us)  # Set the exposure value for the camera   
+
+            self.exposure_label.configure(text=f"Exposure (us): {exposure_us}") # Update the exposure label
+
         except AttributeError:
-            # Handle the case where the camera does not have the 'set_exposure' method
-            print("Camera does not support setting exposure programmatically.")
+            logging.error("Exposure not set.")
+
 
     def toggle_video_feed(self):
         if self.is_live:
@@ -89,10 +91,12 @@ class CameraApp:
                 self.is_saving_images = True
                 self.record_button.configure(text="Stop Saving Images")
 
+
     def save_image(self, frame):
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         filename = os.path.join(self.image_folder, f"image_{timestamp}.png")
         cv2.imwrite(filename, frame)
+
 
     def update_video_label(self):
         if self.is_live:
@@ -108,6 +112,7 @@ class CameraApp:
                 self.video_label.configure(image=imgtk)
 
             self.window.after(30, self.update_video_label)
+
 
     def on_closing(self):
         self.is_live = False
