@@ -9,6 +9,14 @@ import time
 
 
 class DynaTracker:
+    '''
+    Object to track a target using a Dynamixel servo and a QTM mocap system.
+    
+    - Before running this script, ensure that the Dynamixel servo is connected to
+    the computer via USB and that the QTM mocap system is running and streaming
+    data.
+    - In QTM align
+    '''
     def __init__(self, com_port='COM5'):
 
         # I/O interface params
@@ -123,6 +131,6 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    # cProfile.run('main()')
-    main()
+    cProfile.run('main()')
+    # main()
         
