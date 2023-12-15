@@ -5,6 +5,12 @@ import asyncio
 import math
 import qtm
 
+# System imports
+import os
+import win32api
+import win32process
+import win32con
+
 
 class MoCap(Thread):
 
@@ -125,6 +131,11 @@ class MoCap(Thread):
         """
         self._stay_open = False
         self.join()
+
+
+def set_realtime_priority():
+        handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, os.getpid())
+        win32process.SetPriorityClass(handle, win32process.REALTIME_PRIORITY_CLASS) # you could set this to REALTIME_PRIORITY_CLASS etc.
 
 
 class DataLogger:

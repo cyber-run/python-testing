@@ -30,7 +30,6 @@ class MoCap(Thread):
         # Kinematic data vars
         self.state = [0, 0, 0, 0, 0, 0]
         self.position = [0,0]
-        self.matrix = None
         self.yaw = 0
         self.pitch = 0
         self.lost = False
@@ -65,7 +64,7 @@ class MoCap(Thread):
             params_xml = await self._connection.get_parameters(parameters=['6d'])
 
             # Assign 6D streaming callback
-            await self._connection.stream_frames(components=['6d'], on_packet=self._on_packet)
+            await self._connection.stream_frames(components=['6DEuler'], on_packet=self._on_packet)
 
         if self.stream_type == '3d':
             # Register index of body for 6D tracking
@@ -84,7 +83,7 @@ class MoCap(Thread):
         """
         if self.stream_type == '6d':
             # Extract new 6D component from packet
-            header, new_component = packet.get_6d()
+            header, new_component = packet.get_6d_euler()
 
             # If no new component: mark as lost and return from function
             if not new_component:
@@ -92,10 +91,11 @@ class MoCap(Thread):
                 self.lost = True
                 return
 
-            pos, mat = new_component[0]
+            pos, rot = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
-            self.matrix = [mat.matrix[0:3], mat.matrix[3:6], mat.matrix[6:9]]
-
+            self.pitch = rot.a2
+            self.yaw = rot.a3
+            self.state = [pos.x, pos.y, pos.z, rot.a1, rot.a2, rot.a3]
             self.lost = False
 
         elif self.stream_type == '3d': 
@@ -143,6 +143,3 @@ class DataLogger:
         savemat(file_path, mdic)
 
 
-if __name__ == '__main__':
-    target = MoCap(stream_type='3d')
-    tracker = MoCap(stream_type='6d')

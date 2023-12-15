@@ -12,8 +12,8 @@
 
 - [ ] Add camera interfacing and triggering to the code !H
 
-- [ ] Implement Dynamixel in experiment
+- [x] Implement Dynamixel in experiment
 
 - [x] Integrate tinymovr sdk
 
-- [ ] Implement tinymovr in experiment
+- [x] Implement tinymovr in experiment

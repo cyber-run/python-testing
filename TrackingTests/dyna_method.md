@@ -8,6 +8,6 @@
 - The working implementation uses the x-axis pointing at the target during the inital phase of the code running.
 
 ### Todo:
-- [ ] Add in the ability to change the tracking axis
+- [x] Add in the ability to change the tracking axis
 - [ ] Further investigate 6DOF rigid body placement with regards to the optical axis; as long as the distance and rotations between the body are known, the tracking can be mapped to optical axis.
 - [ ] Implement more exception handling for initialisation of the Dynamixel servo ie. if the servo is not connected to the computer, the code will not run and will prompt user and wait.
