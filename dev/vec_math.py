@@ -34,8 +34,8 @@ def calc_pitch_vec(pitch_angle: float) -> np.ndarray:
 
 def calc_azi_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     # Convert the input points to NumPy arrays
-    a = np.array([a[0], a[1]])
-    b = np.array([b[0], b[1]])
+    a = np.array([a[1], a[0]])
+    b = np.array([b[1], b[0]])
 
     # Calculate the vector between the two points
     target_vec = a - b
@@ -44,8 +44,8 @@ def calc_azi_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def calc_elv_vec(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     # Convert the input points to NumPy arrays
-    a = np.array([a[0], a[2]])
-    b = np.array([b[0], b[2]])
+    a = np.array([a[1], a[2]])
+    b = np.array([b[1], b[2]])
 
     # Calculate the vector between the two points
     target_vec = a - b

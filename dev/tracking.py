@@ -18,11 +18,18 @@ class DynaTracker:
     - In QTM align
     '''
     def __init__(self, com_port='COM5'):
+        # Connect to QTM; init tracker and target
+        self.target = MoCap(stream_type='3d')
+        self.tracker = MoCap(stream_type='6d')
+        time.sleep(1)
 
         # Create dynamixel controller object and open serial port
         self.dyna = DynaController(com_port)
         self.dyna.open_port()
-        time.sleep(0.5)
+        
+        # Default init operating mode into position
+        self.dyna.set_op_mode(self.dyna.pan_id, 3)
+        self.dyna.set_op_mode(self.dyna.tilt_id, 3)
 
         # Marker tracking params
         self.target_angle = 0
@@ -32,17 +39,8 @@ class DynaTracker:
         self.local_yaw_centre = [144.55, -43.33, 51]
         self.local_pitch_centre = [144.55, 64.77, 51]
 
-        # Default init operating mode into position
-        self.dyna.set_op_mode(self.dyna.pan_id, 3)
-        self.dyna.set_op_mode(self.dyna.tilt_id, 3)
-
         # # Set the dynamixel to its initial 180 degree position ie centre range
         self.dyna.set_sync_pos(225, 45)
-
-        # Connect to QTM; init tracker and target
-        self.target = MoCap(stream_type='3d')
-        self.tracker = MoCap(stream_type='6d')
-        time.sleep(1)
 
         # Get global mirror centres
         self.global_yaw_centre = vm.local_to_global(self.local_yaw_centre, self.tracker.matrix, self.tracker.position)
@@ -52,18 +50,12 @@ class DynaTracker:
         self.yaw_servo_centre = self.dyna.get_pos(self.dyna.pan_id)
         self.pitch_servo_centre = self.dyna.get_pos(self.dyna.tilt_id)
 
-        ### ^^^ ALL GOOD UP TO HERE ^^^ ###
-
         # Calculate the reference vectors
         x_vector = [self.tracker.matrix[0][0], self.tracker.matrix[1][0], self.tracker.matrix[2][0]]
         self.ref_yaw_vec = [x_vector[0], x_vector[1]]
 
         z_vector = [self.tracker.matrix[0][2], self.tracker.matrix[1][2], self.tracker.matrix[2][2]]
         self.ref_pitch_vec = [-z_vector[1], -z_vector[2]]
-
-        print(self.ref_yaw_vec)
-        print(self.ref_pitch_vec)
-        input()
 
         # Get the current tracker position for angle calcs
         self.tracker_pos = self.tracker.position
@@ -84,15 +76,22 @@ class DynaTracker:
         # Calculate the angle error
         self.target_yaw_angle = vm.vec_ang_delta(target_yaw_vec, self.ref_pitch_vec)
         self.target_pitch_angle = vm.vec_ang_delta(target_pitch_vec, self.ref_pitch_vec)
+        # print(f'Target yaw angle: {self.target_yaw_angle}')
+        
+        # Map yaw target angle to servo range
+        yaw_angle = self.num_to_range(-180, 0, 180, 270, self.target_yaw_angle)
+        #print(f'Current yaw angle: {yaw_angle}')
 
-        # Adjust the servo position based on the angle error
-        self.curr_yaw_angle = (self.yaw_servo_centre - self.target_yaw_angle) % 360
-        self.curr_pitch_angle = (self.pitch_servo_centre - self.target_pitch_angle) % 360
+        # Map pitch target angle to servo range
+        pitch_angle = self.num_to_range(-90, 90, 0, 90, self.target_pitch_angle)
+        #print(f'Current pitch angle: {pitch_angle}')
 
-        self.dyna.set_sync_pos(self.curr_yaw_angle, self.curr_pitch_angle)
-        logging.info("Adjusting angle to: %s, %s", self.curr_yaw_angle, self.curr_pitch_angle)
+        self.dyna.set_sync_pos(yaw_angle, pitch_angle)
+        logging.info("Adjusting angle to: %s, %s", yaw_angle, pitch_angle)
 
-        time.sleep(0.01)
+
+    def num_to_range(self, inMin, inMax, outMin, outMax, inVal):
+        return (inVal - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
 
 
     def shutdown(self) -> None:
@@ -111,22 +110,13 @@ class DynaTracker:
 
 def main() -> None:
     reload(logging)
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.ERROR)
 
     set_realtime_priority()
 
     dyna_tracker = DynaTracker()
-
+    
     try:
-        dyna_tracker.dyna.set_torque(False)
-
-        # Change dynamixel EEPROM settings here
-
-        dyna_tracker.dyna.set_op_mode(3)
-
-        #############################################
-
-        dyna_tracker.dyna.set_torque(True)
 
         while True:
             dyna_tracker.track()

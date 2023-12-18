@@ -96,7 +96,7 @@ class DynaController:
             quit()
 
         # Syncwrite goal position
-        _ = self.pos_sync_write.txPacket()
+        x = self.pos_sync_write.txPacket()
 
         # Clear syncwrite parameter storage
         self.pos_sync_write.clearParam()
