@@ -79,12 +79,12 @@ class DynaTracker:
         # print(f'Target yaw angle: {self.target_yaw_angle}')
         
         # Map yaw target angle to servo range
-        yaw_angle = self.num_to_range(-180, 0, 180, 270, self.target_yaw_angle)
-        #print(f'Current yaw angle: {yaw_angle}')
+        yaw_angle = self.num_to_range(-90, 90, 180, 270, self.target_yaw_angle)
+        print(f'Current yaw angle: {self.target_yaw_angle}')
 
         # Map pitch target angle to servo range
-        pitch_angle = self.num_to_range(-90, 90, 0, 90, self.target_pitch_angle)
-        #print(f'Current pitch angle: {pitch_angle}')
+        pitch_angle = self.num_to_range(-90, 0, 0, 45, self.target_pitch_angle)
+        print(f'Current pitch angle: {self.target_pitch_angle}\n\n')
 
         self.dyna.set_sync_pos(yaw_angle, pitch_angle)
         logging.info("Adjusting angle to: %s, %s", yaw_angle, pitch_angle)
