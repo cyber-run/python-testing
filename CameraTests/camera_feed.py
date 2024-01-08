@@ -1,5 +1,6 @@
 import logging
 logging.basicConfig(level=logging.INFO)
+
 from PIL import Image, ImageTk
 import customtkinter as ctk
 import tkinter as tk
@@ -9,158 +10,135 @@ import cv2
 import os
 from typing import Optional
 
-class CameraApp:
-    def __init__(self, window: ctk.CTk, window_title: str):
-        self.window = window
-        self.window.title(window_title)
 
-        self.is_live = False  # Initialize the control variable for video feed status
-        self.is_saving_images = False  # Initialize the control variable for image saving status
-
+class CameraManager:
+    def __init__(self):
+        self.cap = None
         self.initialize_camera()
-        self.setup_gui_elements()
-
-        self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
-        self.window.mainloop()
 
     def initialize_camera(self):
-        logging.info("Initializing camera")
         try:
             self.cap = EasyPySpin.VideoCapture(0)
             self.configure_camera()
         except Exception as e:
             logging.error(f"Failed to initialize camera: {e}")
-            self.cap = None
-
 
     def configure_camera(self):
-        # Set desired resolution for the camera
-        desired_width = 960
-        desired_height = 720
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, desired_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, desired_height)
-
-        # Define your ROI size (this can be different from the desired resolution)
-        roi_width = 960
-        roi_height = 720
-
-        # Center the ROI on the sensor
-        self.center_roi_on_sensor(roi_width, roi_height)
+        if self.cap:
+            desired_width, desired_height = 960, 720
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, desired_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, desired_height)
+            self.center_roi_on_sensor(desired_width, desired_height)
 
     def center_roi_on_sensor(self, roi_width, roi_height):
-        """
-        Center the ROI on the camera sensor by adjusting the offset values.
-
-        :param roi_width: Desired width of the ROI
-        :param roi_height: Desired height of the ROI
-        """
         sensor_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
         sensor_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-
-        offset_x = (sensor_width - roi_width) // 2
-        offset_y = (sensor_height - roi_height) // 2
-
+        offset_x, offset_y = (sensor_width - roi_width) // 2, (sensor_height - roi_height) // 2
         self.cap.set_pyspin_value("OffsetX", offset_x)
         self.cap.set_pyspin_value("OffsetY", offset_y)
         self.cap.set_pyspin_value("Width", roi_width)
         self.cap.set_pyspin_value("Height", roi_height)
 
-    def setup_gui_elements(self):
-        logging.info("Setting up GUI elements")
-        
-        ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("blue")
-
-        self.toggle_video_button = ctk.CTkButton(self.window, text="Start Live Feed", command=self.toggle_video_feed)
-        self.toggle_video_button.pack(pady=20, padx=20)
-
-        self.video_label = ctk.CTkLabel(self.window, text="")
-        self.video_label.pack()
-
-        self.setup_exposure_controls()
-        self.setup_image_saving_controls()
-
-    def setup_exposure_controls(self):
-        self.exposure_slider = ctk.CTkSlider(self.window, from_=1, to=100000, command=self.adjust_exposure)
-        self.exposure_slider.set(50)
-        self.exposure_slider.pack(pady=20)
-
-        exposure = self.get_camera_exposure()
-        self.exposure_label = ctk.CTkLabel(self.window, text=f"Exposure (us): {exposure}")
-        self.exposure_label.pack(pady=(10, 0))
-
-    def get_camera_exposure(self) -> str:
+    def read_frame(self):
         if self.cap:
-            try:
-                return str(self.cap.get(cv2.CAP_PROP_EXPOSURE))
-            except AttributeError:
-                logging.error("Failed to get exposure.")
-        return "N/A"
+            return self.cap.read()
+        return False, None
 
-    def setup_image_saving_controls(self):
+    def release(self):
+        if self.cap:
+            self.cap.release()
+
+class CameraApp:
+    def __init__(self, window: ctk.CTk, window_title: str):
+        self.window = window
+        self.window.title(window_title)
+        self.camera_manager = CameraManager()
+
+        self.is_live = False
         self.is_saving_images = False
-        self.image_folder = "images"
-        if not os.path.exists(self.image_folder):
-            os.makedirs(self.image_folder)
+        self.show_crosshair = tk.BooleanVar(value=False)
 
-        self.record_button = ctk.CTkButton(self.window, text="Start Saving Images", command=self.toggle_image_saving)
-        self.record_button.pack(pady=20)
+        self.setup_gui_elements()
+        self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.window.mainloop()
 
-    def adjust_exposure(self, exposure_value: float):
-        if self.cap:
-            try:
-                self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
-                self.exposure_label.configure(text=f"Exposure (us): {exposure_value}")
-            except AttributeError:
-                logging.error("Exposure not set.")
+    def setup_gui_elements(self):
+        self.video_label = ctk.CTkLabel(self.window, text="")
+        self.video_label.pack(fill="both", expand=True)
+
+        control_frame = ctk.CTkFrame(self.window)
+        control_frame.pack(fill="x", pady=10)
+
+        self.toggle_video_button = ctk.CTkButton(control_frame, text="Start Live Feed", command=self.toggle_video_feed)
+        self.toggle_video_button.pack(side="left", padx=10)
+
+        self.record_button = ctk.CTkButton(control_frame, text="Start Saving Images", command=self.toggle_image_saving)
+        self.record_button.pack(side="left", padx=10)
+
+        self.exposure_slider = ctk.CTkSlider(control_frame, from_=1, to=100000, command=self.adjust_exposure)
+        self.exposure_slider.set(50)
+        self.exposure_slider.pack(side="left", padx=10)
+
+        # Exposure label is updated within adjust_exposure if camera is initialized
+        self.exposure_label = ctk.CTkLabel(control_frame, text="Exposure (us): N/A")
+        self.exposure_label.pack(side="left", padx=10)
+
+        self.crosshair_checkbox = ctk.CTkCheckBox(control_frame, text="Show Crosshair", variable=self.show_crosshair, onvalue=True, offvalue=False)
+        self.crosshair_checkbox.pack(side="left", padx=10)
 
     def toggle_video_feed(self):
         self.is_live = not self.is_live
-        button_text = "Stop Live Feed" if self.is_live else "Start Live Feed"
-        self.toggle_video_button.configure(text=button_text)
+        self.toggle_video_button.configure(text="Stop Live Feed" if self.is_live else "Start Live Feed")
         if self.is_live:
             self.update_video_label()
 
     def toggle_image_saving(self):
         self.is_saving_images = not self.is_saving_images
-        button_text = "Stop Saving Images" if self.is_saving_images else "Start Saving Images"
-        self.record_button.configure(text=button_text)
+        self.record_button.configure(text="Stop Saving Images" if self.is_saving_images else "Start Saving Images")
 
-    def save_image(self, frame):
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        filename = os.path.join(self.image_folder, f"image_{timestamp}.png")
-        cv2.imwrite(filename, frame)
+    def adjust_exposure(self, exposure_value: float):
+        if self.camera_manager.cap:
+            try:
+                self.camera_manager.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
+                self.exposure_label.configure(text=f"Exposure (us): {exposure_value}")
+            except AttributeError:
+                logging.error("Exposure not set.")
 
     def update_video_label(self):
-        if self.is_live and self.cap:
-            ret, frame = self.cap.read()
+        if self.is_live:
+            ret, frame = self.camera_manager.read_frame()
             if ret:
-                frame = cv2.flip(frame, 0)
-                frame = cv2.flip(frame, 1)
+                if self.show_crosshair.get():
+                    frame = self.draw_crosshair(frame)
                 self.display_frame(frame)
                 self.save_frame_if_needed(frame)
             self.window.after(30, self.update_video_label)
 
     def display_frame(self, frame):
+        frame = cv2.flip(cv2.flip(frame, 0), 1)
         cv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(cv_img)
         imgtk = ImageTk.PhotoImage(image=pil_img)
         self.video_label.imgtk = imgtk
         self.video_label.configure(image=imgtk)
 
+    def draw_crosshair(self, frame):
+        height, width = frame.shape[:2]
+        cv2.line(frame, (width // 2, 0), (width // 2, height), (0, 255, 0), 2)
+        cv2.line(frame, (0, height // 2), (width, height // 2), (0, 255, 0), 2)
+        return frame
+
     def save_frame_if_needed(self, frame):
         if self.is_saving_images:
-            self.save_image(frame)
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = os.path.join(self.image_folder, f"image_{timestamp}.png")
+            cv2.imwrite(filename, frame)
 
     def on_closing(self):
         self.is_live = False
-        if self.cap:
-            self.cap.release()
+        self.camera_manager.release()
         self.window.destroy()
 
-# Main execution
 if __name__ == "__main__":
-    logging.info("Starting application")
     root = ctk.CTk()
     app = CameraApp(root, "DART")
-    logging.info("Application has started")
