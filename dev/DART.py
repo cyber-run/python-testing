@@ -2,7 +2,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 from camera_manager import CameraManager
-from tracking import DynaTracker
+from dyna_controller import DynaController
 from PIL import Image, ImageTk
 import customtkinter as ctk
 import tkinter as tk
@@ -18,7 +18,10 @@ class DART:
         self.window = window
         self.window.title("DART")
         self.camera_manager = CameraManager()
-        # self.tracker = DynaTracker()
+        
+        # Initialise Dynamixel controller object and open port
+        dyna = DynaController(com_port='/dev/cu.usbserial-FT89FAA7')
+        dyna.open_port()
 
         # GUI element flags
         self.is_live = False
@@ -38,6 +41,10 @@ class DART:
     def setup_gui_elements(self):
         self.video_label = ctk.CTkLabel(self.window, text="")
         self.video_label.pack(fill="both", expand=True)
+
+        # Frame for motor controls
+        dyn_control_frame = ctk.CTkFrame(self.window)
+        dyn_control_frame.pack(padx = 20, pady=10, side = ctk.RIGHT)  # Increase vertical padding
 
         # Frame for camera controls
         camera_control_frame = ctk.CTkFrame(self.window)
