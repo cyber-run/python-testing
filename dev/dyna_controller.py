@@ -71,7 +71,13 @@ class DynaController:
         self.write4ByteData(motor_id, self.X_SET_POS, pos)
 
     def set_sync_pos(self, pan_pos: float = 180, tilt_pos: float = 180) -> None:
-
+        '''
+        Set servo position synchronously for both motors.
+        
+        Parameters:
+        - pan_pos (float): Desired pan position in degrees.
+        - tilt_pos (float): Desired tilt position in degrees.
+        '''
         # Convert from degrees to encoder position
         pan_pos = int(pan_pos * 4095 / 360)
         tilt_pos = int(tilt_pos * 4095 / 360)

@@ -36,30 +36,19 @@ class DynaTracker:
         self.curr_angle = 0
 
         # Local mirror vecs
-        self.local_yaw_centre = [133.15, -32.33, 55]
-        self.local_pitch_centre = [133.15, 23.77, 55]
+        self.local_yaw_centre = [144.55, -43.33, 51]
+        self.local_pitch_centre = [144.55, 64.77, 51]
 
-        # # Set the dynamixel to its initial centre
-        # Pan centre is 225 degrees: left = 235, right = 215
-        # Tilt centre is 45 degrees: forward/up = 35, down/back = 55
-        self.pan_centre = 225
-        self.tilt_centre = 45
-        self.servo_range = 20
-        self.dyna.set_sync_pos(self.pan_centre, self.tilt_centre)
-        time.sleep(0.3)
-        self.dyna.set_sync_pos(230, 50)
-        time.sleep(0.3)
-        self.dyna.set_sync_pos(220, 40)
-
+        # # Set the dynamixel to its initial 180 degree position ie centre range
+        self.dyna.set_sync_pos(225, 45)
 
         # Get global mirror centres
         self.global_yaw_centre = vm.local_to_global(self.local_yaw_centre, self.tracker.matrix, self.tracker.position)
         self.global_pitch_centre = vm.local_to_global(self.local_pitch_centre, self.tracker.matrix, self.tracker.position)
 
-        print(f'Global yaw centre: {self.global_yaw_centre}')
-        print(f'Global pitch centre: {self.global_pitch_centre}')
-        print(f'Target position: {self.target.position}')
-        # input("Press enter to continue")
+        # Store the current pitch centre position for angle calcs
+        self.yaw_servo_centre = self.dyna.get_pos(self.dyna.pan_id)
+        self.pitch_servo_centre = self.dyna.get_pos(self.dyna.tilt_id)
 
         # Calculate the reference vectors
         x_vector = [self.tracker.matrix[0][0], self.tracker.matrix[1][0], self.tracker.matrix[2][0]]
@@ -85,25 +74,20 @@ class DynaTracker:
         target_pitch_vec = vm.calc_elv_vec(target_pos, self.global_pitch_centre)
 
         # Calculate the angle error
-        self.target_yaw_angle = abs(vm.vec_ang_delta(target_yaw_vec, self.ref_pitch_vec))
-        self.target_pitch_angle = abs(vm.vec_ang_delta(target_pitch_vec, self.ref_pitch_vec))
-        print(f'Measured pan: {self.target_yaw_angle},  tilt angle: {self.target_pitch_angle}')
-        
-        yaw_angle =+ 0
-        pitch_angle =+ 0
-
-        # # Set the dynamixel to its initial centre
-        # Pan centre is 225 degrees: left = 235, right = 215
-        # Tilt centre is 45 degrees: forward/up = 35, down/back = 55
+        self.target_yaw_angle = vm.vec_ang_delta(target_yaw_vec, self.ref_pitch_vec)
+        self.target_pitch_angle = vm.vec_ang_delta(target_pitch_vec, self.ref_pitch_vec)
+        # print(f'Target yaw angle: {self.target_yaw_angle}')
         
         # Map yaw target angle to servo range
-        yaw_angle = self.num_to_range(0, 180, 270, 180, self.target_yaw_angle)
+        yaw_angle = self.num_to_range(-90, 90, 180, 270, self.target_yaw_angle)
+        print(f'Current yaw angle: {self.target_yaw_angle}')
 
         # Map pitch target angle to servo range
-        pitch_angle = self.num_to_range(90, 0, 45, 90, self.target_pitch_angle)
+        pitch_angle = self.num_to_range(-90, 0, 0, 45, self.target_pitch_angle)
+        print(f'Current pitch angle: {self.target_pitch_angle}\n\n')
 
         self.dyna.set_sync_pos(yaw_angle, pitch_angle)
-        print(f'Servo pan: {yaw_angle},  tilt angle: {pitch_angle}\n')
+        logging.info("Adjusting angle to: %s, %s", yaw_angle, pitch_angle)
 
 
     def num_to_range(self, inMin, inMax, outMin, outMax, inVal):
@@ -136,7 +120,7 @@ def main() -> None:
 
         while True:
             dyna_tracker.track()
-            # time.sleep(0.3)
+            # time.sleep(0.1)
 
     except KeyboardInterrupt:
         dyna_tracker.shutdown()

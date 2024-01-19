@@ -1,5 +1,6 @@
-from dynamixel_sdk import *  # Uses Dynamixel SDK library
 import logging
+logging.basicConfig(level=logging.ERROR)
+from dynamixel_sdk import *  # Uses Dynamixel SDK library
 import time
 
 class DynaController:
@@ -272,26 +273,31 @@ if __name__ == '__main__':
     # Initialise Dynamixel controller object and open port
     dyna = DynaController()
     dyna.open_port()
+    time.sleep(0.3)
 
     # Set operating mode of both to position control
-    dyna.set_op_mode(dyna.pan_id, 3)
-    dyna.set_op_mode(dyna.tilt_id, 3)
-    
-    pos = 0
-    direction = 1  # Determines whether the position is increasing or decreasing
+    print(dyna.set_op_mode(dyna.pan_id, 3))
+    print(dyna.set_op_mode(dyna.tilt_id, 3))
+    time.sleep(0.3)
 
+    tilt_ang = 35
+    pan_ang = 215
+    dir = 1
     # Example usage with motor IDs
     try:
         while True:
             # Set position for each motor
-            dyna.set_sync_pos(pos, pos)
+            dyna.set_sync_pos(pan_ang, tilt_ang)
 
             # Update position
-            pos += direction
-            if pos >= 360 or pos <= 0:
-                direction *= -1  # Change direction at 0 and 360 degrees
+            pan_ang += dir
+            tilt_ang += dir
+            print(f'Pan angle: {pan_ang}, Tilt angle: {tilt_ang}')
 
-            time.sleep(0.01)  # Sleep for a short duration
+            if pan_ang >= 235 or pan_ang <= 215:
+                dir *= -1  # Change direction at 0 and 360 degrees
+
+            time.sleep(0.001)  # Sleep for a short duration
 
     except KeyboardInterrupt:
         print("Exiting...")
