@@ -5,6 +5,7 @@ from camera_manager import CameraManager
 from dyna_controller import DynaController
 from PIL import Image, ImageTk
 import customtkinter as ctk
+import vec_math2 as vm2
 import tkinter as tk
 import numpy as np
 import cProfile
@@ -20,8 +21,7 @@ class DART:
         self.camera_manager = CameraManager()
         
         # Initialise Dynamixel controller object and open port
-        dyna = DynaController(com_port='/dev/cu.usbserial-FT89FAA7')
-        dyna.open_port()
+        self.dyna = DynaController(com_port='COM5')
 
         # GUI element flags
         self.is_live = False
@@ -34,21 +34,43 @@ class DART:
         self.threshold_value = 70
         self.strength_value = 60
 
+        # Motor values
+        self.pan_value = 0
+        self.tilt_value = 0
+
         self.setup_gui_elements()
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.mainloop()
 
     def setup_gui_elements(self):
         self.video_label = ctk.CTkLabel(self.window, text="")
-        self.video_label.pack(fill="both", expand=True)
+        self.video_label.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         # Frame for motor controls
         dyn_control_frame = ctk.CTkFrame(self.window)
-        dyn_control_frame.pack(padx = 20, pady=10, side = ctk.RIGHT)  # Increase vertical padding
+        dyn_control_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
+
+        # Frame for pan slider and label
+        pan_frame = ctk.CTkFrame(dyn_control_frame)
+        pan_frame.pack(side="top", padx=10, pady=10)
+        self.pan_slider = ctk.CTkSlider(pan_frame, from_=-45, to=45, command=self.set_pan)
+        self.pan_slider.set(self.pan_value)
+        self.pan_slider.pack(padx =5, pady=5)
+        self.pan_label = ctk.CTkLabel(pan_frame, text="Pan angle: 0")
+        self.pan_label.pack()
+
+        # Frame for tilt slider and label
+        tilt_frame = ctk.CTkFrame(dyn_control_frame)
+        tilt_frame.pack(side="top", padx=10, pady=10)
+        self.tilt_slider = ctk.CTkSlider(tilt_frame, from_=-45, to=45, command=self.set_tilt)
+        self.tilt_slider.set(self.tilt_value)
+        self.tilt_slider.pack(padx =5, pady=5)
+        self.tilt_label = ctk.CTkLabel(tilt_frame, text="Tilt angle: 0")
+        self.tilt_label.pack()
 
         # Frame for camera controls
         camera_control_frame = ctk.CTkFrame(self.window)
-        camera_control_frame.pack(padx = 20, pady=10)  # Increase vertical padding
+        camera_control_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
 
         # Button to start/stop live feed
         self.toggle_video_button = ctk.CTkButton(camera_control_frame, text="Start Live Feed", command=self.toggle_video_feed)
@@ -69,7 +91,7 @@ class DART:
 
         # Frame for image processing detect
         img_processing_frame = ctk.CTkFrame(self.window)
-        img_processing_frame.pack(padx=20, pady=10)  # Increase vertical padding
+        img_processing_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
 
         # Checkbox for crosshair, threshold, and detection
         self.crosshair_checkbox = ctk.CTkCheckBox(img_processing_frame, text="Crosshair", variable=self.show_crosshair, onvalue=True, offvalue=False)
@@ -98,6 +120,18 @@ class DART:
         self.strength_slider.pack(padx =5, pady=5)
         self.strength_label = ctk.CTkLabel(strength_frame, text="Strength: 60")
         self.strength_label.pack()
+
+    def set_pan(self, value: float):
+        self.pan_value = int(value)
+        self.pan_label.configure(text=f"Pan angle: {int(value)}")
+        angle = vm2.num_to_range(self.pan_value, -45, 45, 202.5, 247.5)
+        self.dyna.set_pos(1, angle)
+
+    def set_tilt(self, value: float):
+        self.tilt_value = int(value)
+        self.tilt_label.configure(text=f"Tilt angle: {int(value)}")
+        angle = vm2.num_to_range(self.tilt_value, -45, 45, 292.5, 337.5)
+        self.dyna.set_pos(2, angle)
 
     def toggle_video_feed(self):
         self.is_live = not self.is_live
@@ -153,7 +187,7 @@ class DART:
         # Flip the frame both vertically and horizontally
         flipped_frame = cv2.flip(crosshair_frame, -1)
 
-        return flipped_frame
+        return crosshair_frame
 
     def needs_grayscale(self):
         return self.threshold_flag.get() or self.detect_flag.get()
