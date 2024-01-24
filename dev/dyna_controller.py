@@ -30,6 +30,12 @@ class DynaController:
 
         # Initialize GroupSyncWrite instance
         self.pos_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, self.X_SET_POS, 4)
+
+        # Open port
+        self.open_port()
+
+        # Init motor rotations to normal forward gaze
+        self.set_sync_pos(225, 315)
         
 
     def open_port(self) -> bool:

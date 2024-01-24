@@ -4,6 +4,10 @@ import numpy as np
 import itertools
 import math
 
+def num_to_range(num, inMin, inMax, outMin, outMax):
+  return outMin + (float(num - inMin) / float(inMax - inMin) * (outMax
+                  - outMin))
+
 def solve_for_mxyz(points: np.ndarray, angles: np.ndarray) -> np.ndarray:
     """
     Solve for mx, my, and mz given a list of points and the respective angles between successive points.
