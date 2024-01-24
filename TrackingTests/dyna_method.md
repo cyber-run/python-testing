@@ -9,5 +9,5 @@
 
 ### Todo:
 - [x] Add in the ability to change the tracking axis
-- [ ] Further investigate 6DOF rigid body placement with regards to the optical axis; as long as the distance and rotations between the body are known, the tracking can be mapped to optical axis.
-- [ ] Implement more exception handling for initialisation of the Dynamixel servo ie. if the servo is not connected to the computer, the code will not run and will prompt user and wait.
+- [x] Further investigate 6DOF rigid body placement with regards to the optical axis; as long as the distance and rotations between the body are known, the tracking can be mapped to optical axis.
+- [x] Implement more exception handling for initialisation of the Dynamixel servo ie. if the servo is not connected to the computer, the code will not run and will prompt user and wait.

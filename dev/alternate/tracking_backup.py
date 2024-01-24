@@ -1,7 +1,7 @@
 from dyna_controller import *
 from importlib import reload
 from mocap_stream import *
-import vec_math as vm
+import dev.alternate.vec_math as vm
 import numpy as np
 import cProfile
 import logging

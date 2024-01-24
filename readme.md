@@ -8,12 +8,14 @@
 
 - Then run any scripts as required => python <script_name>.py
 
+- /dev/ => is current working folder
+
 ## TODO list:
 
-- [ ] Add camera interfacing and triggering to the code !H
+- [ ] Implement motor calibration through app
 
-- [x] Implement Dynamixel in experiment
+- [ ] Spawn tracking process with rotation matrix
 
-- [x] Integrate tinymovr sdk
+- [ ] Add upgraded motor (and horns) with new mirror mount hardware
 
-- [x] Implement tinymovr in experiment
+- [ ] Investigate QuadDXL controller for higher control frequency
