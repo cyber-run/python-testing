@@ -151,20 +151,20 @@ if __name__ == "__main__":
     # Find local origin point
     mx, my, mz = solve_for_mxyz(points_example, angles_example)
     local_origin = np.round(np.array([mx, my, mz]), 4)
+    print(f"Solved local origin: {local_origin}")
 
     # Find rotation matrix
     rotation_matrix = np.round(def_local_coor_sys(points_example, local_origin), 4)
     # rotation_matrix = svd(points_example)
+    print(f"Rotation Matrix: {rotation_matrix}\n")
 
-    # Convert global point to local point
-    point_global_example = (43, 45, 17)
-    point_local_example = global_to_local(point_global_example, rotation_matrix)
+    for point in points_example:
+        print("Point Global:", point)
 
-    # Calculate rotation components
-    rotation_components_example = calc_rot_comp(point_local_example)
+        # Convert global point to local point
+        point_local_example = global_to_local(point, rotation_matrix)
+        print("Point Local:", point_local_example)
 
-    print("Solved local origin:", local_origin)
-    print("Rotation Matrix:\n", rotation_matrix)
-    print("Point Global:", point_global_example)
-    print("Point Local:", point_local_example)
-    print("Rotation Components:", rotation_components_example)
+        # Calculate rotation components
+        rotation_components_example = calc_rot_comp(point_local_example)
+        print(f"Rotation Components: {rotation_components_example}\n")
