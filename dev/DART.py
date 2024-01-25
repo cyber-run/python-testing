@@ -1,10 +1,11 @@
 import logging
 logging.basicConfig(level=logging.INFO)
 
-from camera_manager import CameraManager
 from dyna_controller import DynaController
+from camera_manager import CameraManager
 from PIL import Image, ImageTk
 import customtkinter as ctk
+from mocap_stream import *
 import vec_math2 as vm2
 import tkinter as tk
 import numpy as np
@@ -12,6 +13,11 @@ import cProfile
 import time
 import cv2
 import os
+
+# Define constants for calibration steps
+CALIBRATION_INITIAL = 1
+CALIBRATION_MIDDLE = 2
+CALIBRATION_FINAL = 5
 
 
 class DART:
@@ -23,12 +29,23 @@ class DART:
         # Initialise Dynamixel controller object and open port
         self.dyna = DynaController(com_port='COM5')
 
+        # Initialise mocap stream
+        self.target = MoCap(stream_type='3d')
+
+        self.calibration_button_state = "initial"
+
         # GUI element flags
         self.is_live = False
         self.is_saving_images = False
         self.show_crosshair = tk.BooleanVar(value=False)
         self.threshold_flag = tk.BooleanVar(value=False)
         self.detect_flag = tk.BooleanVar(value=False)
+
+        self.calibration_positions = []
+        self.calibration_angles = []
+        self.pan_angle = 0
+        self.calibration_step = 0
+        self.calibrated = False
 
         # Threshold values
         self.threshold_value = 70
@@ -67,6 +84,10 @@ class DART:
         self.tilt_slider.pack(padx =5, pady=5)
         self.tilt_label = ctk.CTkLabel(tilt_frame, text="Tilt angle: 0")
         self.tilt_label.pack()
+
+        # Create a calibration button
+        self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrate)
+        self.calibration_button.pack(side="left", padx=10)
 
         # Frame for camera controls
         camera_control_frame = ctk.CTkFrame(self.window)
@@ -133,31 +154,57 @@ class DART:
         angle = vm2.num_to_range(self.tilt_value, -45, 45, 292.5, 337.5)
         self.dyna.set_pos(2, angle)
 
+    def capture_calibration_data(self):
+        """Capture the changed angles and positions for calibration."""
+        try:
+            angle_change = self.pan_angle - self.dyna.get_pos(1)
+            self.pan_angle = self.dyna.get_pos(1)
+            self.calibration_angles.append(angle_change)
+            self.calibration_positions.append(self.target.position)
+        except Exception as e:
+            logging.error(f"Error capturing calibration data: {e}")
+
+    def calibrate(self):
+        """Handle the calibration process for the DART system."""
+        if self.calibration_button_state == "initial":
+            self.calibration_step = 0
+            self.update_calibration_button("Next", "green")
+        else:
+            self.calibration_step += 1
+            if self.calibration_step == CALIBRATION_INITIAL:
+                self.pan_angle = self.dyna.get_pos(1)
+                self.calibration_positions.append(self.target.position)
+                self.set_pan(5)
+            elif CALIBRATION_INITIAL < self.calibration_step < CALIBRATION_FINAL:
+                self.capture_calibration_data()
+                new_pan_angle = 10 if self.calibration_step < CALIBRATION_FINAL else -5
+                self.set_pan(new_pan_angle)
+            elif self.calibration_step == CALIBRATION_FINAL:
+                self.capture_calibration_data()
+                self.perform_final_calibration()
+
+    def perform_final_calibration(self):
+        """Perform the final step of the calibration process."""
+        try:
+            position_array = np.array(self.calibration_positions)
+            angle_array = np.array(self.calibration_angles)
+            self.intersect, self.rotation_matrix = vm2.calibrate(position_array, angle_array)
+            self.calibrated = True
+            logging.info("Calibration completed successfully.")
+            self.update_calibration_button("Calibrate", "SystemButtonFace")
+        except Exception as e:
+            logging.error(f"Error during final calibration: {e}")
+
+    def update_calibration_button(self, text, bg_color):
+        """Update the calibration button's text and background color."""
+        self.calibration_button.configure(text=text, bg=bg_color, command=self.calibrate)
+        self.calibration_button_state = text.lower()
+
     def toggle_video_feed(self):
         self.is_live = not self.is_live
         self.toggle_video_button.configure(text="Stop Live Feed" if self.is_live else "Start Live Feed")
         if self.is_live:
             self.update_video_label()
-
-    def toggle_image_saving(self):
-        self.is_saving_images = not self.is_saving_images
-        self.record_button.configure(text="Stop Saving Images" if self.is_saving_images else "Start Saving Images")
-
-    def adjust_exposure(self, exposure_value: float):
-        if self.camera_manager.cap:
-            try:
-                self.camera_manager.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_value)
-                self.exposure_label.configure(text=f"Exposure (us): {exposure_value}")
-            except AttributeError:
-                logging.error("Exposure not set.")
-    
-    def set_threshold(self, value: float):
-        self.threshold_value = int(value)
-        self.threshold_label.configure(text=f"Threshold: {int(value)}")
-
-    def set_strength(self, value: float):
-        self.strength_value = int(value)
-        self.strength_label.configure(text=f"Strength: {int(value)}")
 
     def update_video_label(self):
         if self.is_live:

@@ -147,6 +147,29 @@ def calc_rot_comp(point_local: np.ndarray) -> Tuple[float, float]:
     tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[2]**2)))
     return pan_angle, tilt_angle
 
+def calibrate(points: np.ndarray, angles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calibrate the local coordinate system using a list of points and the respective angles between successive points.
+
+    Args:
+    points (np.ndarray): The array of points' coordinates.
+    angles (np.ndarray): The array of angles in degrees between successive points.
+
+    Returns:
+    Tuple[np.ndarray, np.ndarray]: The solved values of mx, my, and mz, and the rotation matrix.
+    """
+    # Find local origin point
+    mx, my, mz = solve_for_mxyz(points, angles)
+    local_origin = np.round(np.array([mx, my, mz]), 5)
+    print(f"Solved local origin: {local_origin}")
+
+    # Find rotation matrix
+    rotation_matrix = np.round(def_local_coor_sys(points, local_origin), 5)
+    # rotation_matrix = svd(points)
+    print(f"Rotation Matrix: {rotation_matrix}\n")
+
+    return local_origin, rotation_matrix
+
 if __name__ == "__main__":
     # TODO: Get better set of points and angles to test with; implement auto algo testing
     points_example = np.array([(30, 50, 0), (37, 41, 13), (43, 45, 17), (62, 34, 12)])
