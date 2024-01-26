@@ -1,4 +1,5 @@
 from dynamixel_sdk import *  # Uses Dynamixel SDK library
+from typing import Tuple
 import logging
 import time
 
@@ -30,6 +31,10 @@ class DynaController:
 
         # Initialize GroupSyncWrite instance
         self.pos_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, self.X_SET_POS, 4)
+
+        # Initialize GroupSyncRead instance for position data
+        self.pos_sync_read = GroupSyncRead(self.port_handler, self.packet_handler, self.X_GET_POS, 4)
+
 
         # Open port
         self.open_port()
@@ -84,6 +89,7 @@ class DynaController:
         - pan_pos (float): Desired pan position in degrees.
         - tilt_pos (float): Desired tilt position in degrees.
         '''
+        # TODO: Move param storage declaration to innit and remove clear -> for both sync funcs
         # Convert from degrees to encoder position
         pan_pos = int(pan_pos * 4095 / 360)
         tilt_pos = int(tilt_pos * 4095 / 360)
@@ -130,6 +136,38 @@ class DynaController:
         # Convert to degrees
         pos = round(360 * (pos / 4095), 3)
         return pos
+    
+    def get_sync_pos(self) -> Tuple[float, float]:
+        '''
+        Get synchronous positions of the pan and tilt motors using fast sync read method.
+
+        Returns:
+        - Tuple[float, float]: Current positions of the pan and tilt motors in degrees.
+        '''
+        # Add parameters (motor IDs) to sync read
+        for motor_id in [self.pan_id, self.tilt_id]:
+            dxl_addparam_result = self.pos_sync_read.addParam(motor_id)
+            if dxl_addparam_result != True:
+                logging.error("[ID:%03d] groupSyncRead addparam failed" % motor_id)
+                quit()
+
+        # Perform sync read
+        dxl_comm_result = self.pos_sync_read.txRxPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            logging.error(self.packet_handler.getTxRxResult(dxl_comm_result))
+
+        # Retrieve the data
+        pan_pos = self.pos_sync_read.getData(self.pan_id, self.X_GET_POS, 4)
+        tilt_pos = self.pos_sync_read.getData(self.tilt_id, self.X_GET_POS, 4)
+
+        # Clear sync read parameter storage
+        self.pos_sync_read.clearParam()
+
+        # Convert from ticks to degrees
+        pan_pos_deg = self.convert_ticks_to_degrees(pan_pos)
+        tilt_pos_deg = self.convert_ticks_to_degrees(tilt_pos)
+
+        return pan_pos_deg, tilt_pos_deg
 
     def set_vel(self, motor_id: int = 1, vel: float = 0) -> None:
         '''
@@ -263,6 +301,10 @@ class DynaController:
             return None
         else:
             return dxl_data
+        
+    @staticmethod
+    def convert_ticks_to_degrees(ticks: int) -> float:
+        return 360 * (ticks / 4095)
 
     @staticmethod
     def to_signed32(n):
