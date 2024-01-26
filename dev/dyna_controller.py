@@ -4,7 +4,7 @@ import logging
 import time
 
 class DynaController:
-    def __init__(self, com_port: str = 'COM5', baud_rate: int = 115200) -> None:
+    def __init__(self, com_port: str = 'COM5', baud_rate: int = 4000000) -> None:
         # EEPROM addresses for X-series:
         self.X_TORQUE_ENABLE = 64       # Torque enable
         self.X_OP_MODE = 11             # Operating mode
@@ -31,10 +31,20 @@ class DynaController:
 
         # Initialize GroupSyncWrite instance
         self.pos_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, self.X_SET_POS, 4)
+        # Prepare empty byte array for initial parameter storage
+        empty_byte_array = [0, 0, 0, 0]
+        # Add initial parameters for pan and tilt motors
+        for motor_id in [self.pan_id, self.tilt_id]:
+            self.pos_sync_write.addParam(motor_id, empty_byte_array)
 
         # Initialize GroupSyncRead instance for position data
         self.pos_sync_read = GroupSyncRead(self.port_handler, self.packet_handler, self.X_GET_POS, 4)
-
+        # Add parameters (motor IDs) to sync read
+        for motor_id in [self.pan_id, self.tilt_id]:
+            dxl_addparam_result = self.pos_sync_read.addParam(motor_id)
+            if dxl_addparam_result != True:
+                logging.error("[ID:%03d] groupSyncRead addparam failed" % motor_id)
+                quit()
 
         # Open port
         self.open_port()
@@ -89,35 +99,20 @@ class DynaController:
         - pan_pos (float): Desired pan position in degrees.
         - tilt_pos (float): Desired tilt position in degrees.
         '''
-        # TODO: Move param storage declaration to innit and remove clear -> for both sync funcs
         # Convert from degrees to encoder position
         pan_pos = int(pan_pos * 4095 / 360)
         tilt_pos = int(tilt_pos * 4095 / 360)
 
-        logging.debug(f"Setting pan position to {pan_pos} ticks")
-        logging.debug(f"Setting tilt position to {tilt_pos} ticks")
-
         # Allocate goal positions value into byte array
-        pan_pos = [DXL_LOBYTE(DXL_LOWORD(pan_pos)), DXL_HIBYTE(DXL_LOWORD(pan_pos)), DXL_LOBYTE(DXL_HIWORD(pan_pos)), DXL_HIBYTE(DXL_HIWORD(pan_pos))]
-        tilt_pos = [DXL_LOBYTE(DXL_LOWORD(tilt_pos)), DXL_HIBYTE(DXL_LOWORD(tilt_pos)), DXL_LOBYTE(DXL_HIWORD(tilt_pos)), DXL_HIBYTE(DXL_HIWORD(tilt_pos))]
+        pan_byte_array = [DXL_LOBYTE(DXL_LOWORD(pan_pos)), DXL_HIBYTE(DXL_LOWORD(pan_pos)), DXL_LOBYTE(DXL_HIWORD(pan_pos)), DXL_HIBYTE(DXL_HIWORD(pan_pos))]
+        tilt_byte_array = [DXL_LOBYTE(DXL_LOWORD(tilt_pos)), DXL_HIBYTE(DXL_LOWORD(tilt_pos)), DXL_LOBYTE(DXL_HIWORD(tilt_pos)), DXL_HIBYTE(DXL_HIWORD(tilt_pos))]
 
-        # Add the write data to the syncwrite parameter storage
-        dxl_addparam_result = self.pos_sync_write.addParam(self.pan_id, pan_pos)
-        if dxl_addparam_result != True:
-            logging.error("[ID:%03d] groupSyncWrite addparam failed" % self.pan_id)
-            quit()
-
-        # Add the write data to the syncwrite parameter storage
-        dxl_addparam_result = self.pos_sync_write.addParam(self.tilt_id, tilt_pos)
-        if dxl_addparam_result != True:
-            logging.error("[ID:%03d] groupSyncWrite addparam failed" % self.tilt_id)
-            quit()
+        # Change the parameters in the syncwrite storage
+        self.pos_sync_write.changeParam(self.pan_id, pan_byte_array)
+        self.pos_sync_write.changeParam(self.tilt_id, tilt_byte_array)
 
         # Syncwrite goal position
-        x = self.pos_sync_write.txPacket()
-
-        # Clear syncwrite parameter storage
-        self.pos_sync_write.clearParam()
+        self.pos_sync_write.txPacket()
 
     def get_pos(self, motor_id: int = 1) -> float:
         '''
@@ -144,13 +139,6 @@ class DynaController:
         Returns:
         - Tuple[float, float]: Current positions of the pan and tilt motors in degrees.
         '''
-        # Add parameters (motor IDs) to sync read
-        for motor_id in [self.pan_id, self.tilt_id]:
-            dxl_addparam_result = self.pos_sync_read.addParam(motor_id)
-            if dxl_addparam_result != True:
-                logging.error("[ID:%03d] groupSyncRead addparam failed" % motor_id)
-                quit()
-
         # Perform sync read
         dxl_comm_result = self.pos_sync_read.txRxPacket()
         if dxl_comm_result != COMM_SUCCESS:
@@ -159,9 +147,6 @@ class DynaController:
         # Retrieve the data
         pan_pos = self.pos_sync_read.getData(self.pan_id, self.X_GET_POS, 4)
         tilt_pos = self.pos_sync_read.getData(self.tilt_id, self.X_GET_POS, 4)
-
-        # Clear sync read parameter storage
-        self.pos_sync_read.clearParam()
 
         # Convert from ticks to degrees
         pan_pos_deg = self.convert_ticks_to_degrees(pan_pos)
@@ -339,13 +324,14 @@ if __name__ == '__main__':
         while True:
             # Set position for each motor
             dyna.set_sync_pos(pos, pos)
+            print(dyna.get_sync_pos())
 
             # Update position
             pos += direction
             if pos >= 360 or pos <= 0:
                 direction *= -1  # Change direction at 0 and 360 degrees
 
-            time.sleep(0.01)  # Sleep for a short duration
+            time.sleep(0.005)  # Sleep for a short duration
 
     except KeyboardInterrupt:
         print("Exiting...")
