@@ -3,6 +3,9 @@ logging.basicConfig(level=logging.INFO)
 
 from dyna_controller import DynaController
 from camera_manager import CameraManager
+from dart_track import dart_track
+from CTkMessagebox import CTkMessagebox
+from multiprocessing import Process
 from PIL import Image, ImageTk
 import customtkinter as ctk
 from mocap_stream import *
@@ -26,6 +29,7 @@ class DART:
         self.init_gui_flags()
         self.setup_gui_elements()
         self.init_hardware()
+        self.init_calibration()
 
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.mainloop()
@@ -56,6 +60,11 @@ class DART:
         self.threshold_flag = tk.BooleanVar(value=False)
         self.detect_flag = tk.BooleanVar(value=False)
 
+        # Motor control values
+        self.pan_value = 0
+        self.tilt_value = 0
+
+    def init_calibration(self):
         # Calibration variables
         self.calibration_button_state = "initial"
         self.calibration_positions = []
@@ -65,9 +74,12 @@ class DART:
         self.true_angle = 0
         self.pan_angle = 0
 
-        # Motor control values
-        self.pan_value = 0
-        self.tilt_value = 0
+        # Load calibration data if it exists
+        if os.path.exists('calib_data.pkl'):
+            with open('calib_data.pkl', 'rb') as f:
+                self.local_origin, self.rotation_matrix = pickle.load(f)
+                self.calibrated = True
+                logging.info("Calibration data loaded successfully.")
 
     def setup_gui_elements(self):
         self.video_label = ctk.CTkLabel(self.window, text="")
@@ -97,7 +109,11 @@ class DART:
 
         # Create a calibration button
         self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrate)
-        self.calibration_button.pack(side="top", padx=10)
+        self.calibration_button.pack(side="top", padx=10, pady=10)
+
+        # Create a track button
+        self.track_button = ctk.CTkButton(dyn_control_frame, text="Track", command=self.track)
+        self.track_button.pack(side="top", padx=10, pady=10)
 
         # Frame for camera controls
         camera_control_frame = ctk.CTkFrame(self.window)
@@ -151,6 +167,24 @@ class DART:
         self.strength_slider.pack(padx =5, pady=5)
         self.strength_label = ctk.CTkLabel(strength_frame, text="Strength: 60")
         self.strength_label.pack()
+
+    def track(self):
+        if self.calibrated:
+            # Close QTM connections
+            self.target._close()
+            self.target.close()
+
+            # Close serial port
+            self.dyna.close_port()
+
+            time.sleep(3) # HACK: Add small blocking delay to allow serial port to close
+
+            self.track_process = Process(target=dart_track)
+            self.track_process.start()
+        else:
+            # Add popup window to notify user that DART is not calibrated
+            CTkMessagebox(title="Error", message="DART Not Calibrated", icon="cancel")
+            logging.error("DART is not calibrated.")
 
     def set_pan(self, value: float):
         self.pan_value = int(value)
@@ -211,11 +245,11 @@ class DART:
         try:
             position_array = np.array(self.calibration_positions)
             angle_array = np.array(self.calibration_angles)
-            self.intersect, self.rotation_matrix = vm2.calibrate(position_array, angle_array)
+            self.local_origin, self.rotation_matrix = vm2.calibrate(position_array, angle_array)
             self.calibrated = True
 
             with open('calib_data.pkl', 'wb') as f:
-                pickle.dump((self.intersect, self.rotation_matrix), f)
+                pickle.dump((self.local_origin, self.rotation_matrix), f)
 
             logging.info("Calibration completed successfully.")
         except Exception as e:
@@ -337,6 +371,11 @@ class DART:
 
         # Close serial port
         self.dyna.close_port()
+
+        # Terminate subprocess
+        if hasattr(self, 'track_process') and self.track_process.is_alive():
+            self.track_process.terminate()
+            self.track_process.join()  # Wait for the process to terminate
 
         self.window.destroy()
 

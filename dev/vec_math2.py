@@ -34,22 +34,23 @@ def solve_for_mxyz(points: np.ndarray, angles: np.ndarray) -> np.ndarray:
         return equations
     return fsolve(equations, np.zeros(3))
 
-def def_local_coor_sys(points: np.ndarray, local_origin: np.ndarray) -> np.ndarray:
+def def_local_coor_sys(points: np.ndarray, local_origin: np.ndarray, axis_idx: int = 1) -> np.ndarray:
     """
     Define the local coordinate system such that the X-axis directly points to the first point,
     and the Z-axis is orthogonal to the plane defined by the vectors formed from the origin to 
     first point and origin to second point.
 
-    Args:
-    first_point (np.ndarray): The first point's coordinates.
-    global_up (np.ndarray): The global upwards direction (default is [0, 0, 1]).
+    `Args:`
+    points (np.ndarray): The list of points' coordinates found durring calibration.
+    local_origin (np.ndarray): The local origin's coordinates.
+    axis_idx (int): The index of point to define x-axis to define (default is 1)
 
-    Returns:
+    `Returns:
     np.ndarray: The rotation matrix representing the local coordinate system.
     """
-    x_axis = np.array(points[0], dtype=float) / np.linalg.norm(points[0])
+    x_axis = np.array(points[axis_idx], dtype=float) / np.linalg.norm(points[axis_idx])
 
-    z_axis = np.cross(points[0] - local_origin, points[1] - local_origin) / np.linalg.norm(np.cross(points[0] - local_origin, points[1] - local_origin))
+    z_axis = np.cross(points[axis_idx] - local_origin, points[axis_idx + 1] - local_origin) / np.linalg.norm(np.cross(points[axis_idx] - local_origin, points[axis_idx + 1] - local_origin))
 
     y_axis = np.cross(x_axis, z_axis) / np.linalg.norm(np.cross(x_axis, z_axis))
 
