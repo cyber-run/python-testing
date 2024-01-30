@@ -177,7 +177,7 @@ class DART:
             # Close serial port
             self.dyna.close_port()
 
-            time.sleep(3) # HACK: Add small blocking delay to allow serial port to close
+            time.sleep(1) # HACK: Add small blocking delay to allow serial port to close
 
             self.track_process = Process(target=dart_track)
             self.track_process.start()
@@ -240,11 +240,22 @@ class DART:
                 self.calibration_step = 0  # Reset for next calibration
                 self.set_pan(0)  # Reset pan angle
 
-    def perform_final_calibration(self):
+    def perform_final_calibration(self, load_saved_data : bool = True):
         """Perform the final step of the calibration process."""
         try:
-            position_array = np.array(self.calibration_positions)
-            angle_array = np.array(self.calibration_angles)
+            if load_saved_data:
+                position_array = np.loadtxt("calib_pos.csv", delimiter=",")
+                angle_array = np.loadtxt("calib_ang.csv", delimiter=",")
+                print('Loaded saved data.')
+            else:
+                position_array = np.array(self.calibration_positions)
+                angle_array = np.array(self.calibration_angles)
+                np.savetxt("calib_pos.csv", position_array, delimiter=",")
+                np.savetxt("calib_ang.csv", angle_array, delimiter=",")
+
+            position_array = np.around(position_array, 4)
+            angle_array = np.around(angle_array, 4)
+
             initial_guess = np.array([-461, -497, -6])
             self.local_origin, self.rotation_matrix = vm2.calibrate(position_array, angle_array, initial_guess)
             self.calibrated = True

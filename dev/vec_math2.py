@@ -56,8 +56,10 @@ def solve_for_mxyz_minimize(points: np.ndarray, angles: np.ndarray, num_starts: 
             dot_product = np.dot(vector_1, vector_2)
             mag_1 = np.linalg.norm(vector_1)
             mag_2 = np.linalg.norm(vector_2)
+            angle_cosine = dot_product / (mag_1 * mag_2)
+            angle_cosine = np.clip(angle_cosine, -1.0, 1.0)  # Clamping the value
+            calculated_angle = np.arccos(angle_cosine)
             angle_rad = np.radians(angles[i])
-            calculated_angle = np.arccos(dot_product / (mag_1 * mag_2))
             error = (angle_rad - calculated_angle) ** 2
             total_error += error
         return total_error
@@ -66,8 +68,9 @@ def solve_for_mxyz_minimize(points: np.ndarray, angles: np.ndarray, num_starts: 
     best_error = np.inf
 
     for _ in range(num_starts):
-        initial_guess = np.random.uniform(-70, 70, size=3)
-        result = minimize(objective, initial_guess, method='Nelder-Mead', options={'maxiter': 5000, 'xatol': 1e-8, 'fatol': 1e-8})
+        initial_guess = np.array([np.random.uniform(-110, -70), np.random.uniform(380, 420), np.random.uniform(640, 680)])
+        print(f'Initial guess: {initial_guess}')
+        result = minimize(objective, initial_guess, method='nelder-mead', options={'maxiter': 5000, 'xatol': 1e-2, 'fatol': 1e-2})
         if result.fun < best_error:
             best_error = result.fun
             best_result = result
@@ -203,7 +206,7 @@ def calibrate(points: np.ndarray, angles: np.ndarray, initial_guess: np.ndarray)
     Tuple[np.ndarray, np.ndarray]: The solved values of mx, my, and mz, and the rotation matrix.
     """
     # Find local origin point
-    mx, my, mz = solve_for_mxyz(points, angles, initial_guess)
+    mx, my, mz = solve_for_mxyz_minimize(points, angles, 50)
     local_origin = np.round(np.array([mx, my, mz]), 5)
     print(f"Solved local origin: {local_origin}")
 
@@ -217,10 +220,10 @@ def calibrate(points: np.ndarray, angles: np.ndarray, initial_guess: np.ndarray)
 if __name__ == "__main__":
     # TODO: Get better set of points and angles to test with; implement auto algo testing
     points_example = np.array([(30, 50, 0), (37, 41, 13), (43, 45, 17), (62, 34, 12)])
-    angles_example = np.array([17.701, 2.7967, 18.842])
+    angles_example = np.array([-4.924, -4.923, -5.098])
 
     # Find local origin point
-    mx, my, mz = solve_for_mxyz_minimize(points_example, angles_example, 1000)
+    mx, my, mz = solve_for_mxyz_minimize(points_example, angles_example, 30)
     local_origin = np.round(np.array([mx, my, mz]), 4)
     print(f"Solved local origin: {local_origin}")
 

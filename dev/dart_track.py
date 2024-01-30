@@ -89,7 +89,7 @@ class DynaTracker:
         pan_angle = self.num_to_range(pan_angle, 45, -45, 202.5, 247.5)
         tilt_angle = self.num_to_range(tilt_angle, 45, -45, 292.5, 337.5)
 
-        print(f"Pan angle: {pan_angle}, Tilt angle: {tilt_angle}")
+        # print(f"Pan angle: {pan_angle}, Tilt angle: {tilt_angle}")
         # Set the dynamixel to the calculated angles
         self.dyna.set_sync_pos(pan_angle, tilt_angle)
 
@@ -117,7 +117,7 @@ def dart_track():
 
         while True:
             dyna_tracker.track()
-            time.sleep(0.03)
+            # time.sleep(0.03)
 
     except KeyboardInterrupt:
         dyna_tracker.shutdown()
