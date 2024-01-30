@@ -8,7 +8,7 @@ def num_to_range(num, inMin, inMax, outMin, outMax):
   return outMin + (float(num - inMin) / float(inMax - inMin) * (outMax
                   - outMin))
 
-def solve_for_mxyz(points: np.ndarray, angles: np.ndarray) -> np.ndarray:
+def solve_for_mxyz(points: np.ndarray, angles: np.ndarray, initial_guess: np.ndarray = np.zeros(3), max_iterations: int = 2000) -> np.ndarray:
     """
     Solve for mx, my, and mz given a list of points and the respective angles between successive points.
 
@@ -32,7 +32,7 @@ def solve_for_mxyz(points: np.ndarray, angles: np.ndarray) -> np.ndarray:
             eq = np.cos(angle_rad) - (dot_product / (mag_1 * mag_2))
             equations.append(eq)
         return equations
-    return fsolve(equations, np.zeros(3))
+    return fsolve(equations, initial_guess, xtol = 0.005, maxfev=max_iterations)
 
 def def_local_coor_sys(points: np.ndarray, local_origin: np.ndarray, axis_idx: int = 1) -> np.ndarray:
     """
@@ -148,7 +148,7 @@ def calc_rot_comp(point_local: np.ndarray) -> Tuple[float, float]:
     tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[2]**2)))
     return pan_angle, tilt_angle
 
-def calibrate(points: np.ndarray, angles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def calibrate(points: np.ndarray, angles: np.ndarray, initial_guess: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calibrate the local coordinate system using a list of points and the respective angles between successive points.
 
@@ -160,7 +160,7 @@ def calibrate(points: np.ndarray, angles: np.ndarray) -> Tuple[np.ndarray, np.nd
     Tuple[np.ndarray, np.ndarray]: The solved values of mx, my, and mz, and the rotation matrix.
     """
     # Find local origin point
-    mx, my, mz = solve_for_mxyz(points, angles)
+    mx, my, mz = solve_for_mxyz(points, angles, initial_guess)
     local_origin = np.round(np.array([mx, my, mz]), 5)
     print(f"Solved local origin: {local_origin}")
 

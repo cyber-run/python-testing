@@ -245,7 +245,8 @@ class DART:
         try:
             position_array = np.array(self.calibration_positions)
             angle_array = np.array(self.calibration_angles)
-            self.local_origin, self.rotation_matrix = vm2.calibrate(position_array, angle_array)
+            initial_guess = np.array([-461, -497, -6])
+            self.local_origin, self.rotation_matrix = vm2.calibrate(position_array, angle_array, initial_guess)
             self.calibrated = True
 
             with open('calib_data.pkl', 'wb') as f:

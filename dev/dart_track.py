@@ -86,9 +86,10 @@ class DynaTracker:
         pan_angle, tilt_angle = self.calc_rot_comp(local_target_pos)
 
         # Convert geometric angles to dynamixel angles
-        pan_angle = self.num_to_range(pan_angle, -45, 45, 202.5, 247.5)
-        tilt_angle = self.num_to_range(tilt_angle, -45, 45, 292.5, 337.5)
+        pan_angle = self.num_to_range(pan_angle, 45, -45, 202.5, 247.5)
+        tilt_angle = self.num_to_range(tilt_angle, 45, -45, 292.5, 337.5)
 
+        print(f"Pan angle: {pan_angle}, Tilt angle: {tilt_angle}")
         # Set the dynamixel to the calculated angles
         self.dyna.set_sync_pos(pan_angle, tilt_angle)
 
