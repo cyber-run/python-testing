@@ -12,10 +12,20 @@
 
 ## TODO list:
 
-- [ ] Implement motor calibration through app
+- [x] Implement motor calibration through app
 
-- [ ] Spawn tracking process with rotation matrix
+- [x] Spawn tracking process with rotation matrix
 
-- [ ] Add upgraded motor (and horns) with new mirror mount hardware
+- [x] Add upgraded motor (and horns) with new mirror mount hardware
 
-- [ ] Investigate QuadDXL controller for higher control frequency
+- [x] Investigate QuadDXL controller for higher control frequency
+
+- [x] Add sync read and optimise param delcarlation for sync methods
+
+- [ ] Optimse fsolve for better convergence ie initial guess; more runs; higher tolerance
+
+- [ ] Fix bug where calibration angle carries over to another run in session
+
+- [ ] Add stop button for tracking -> terminate process
+
+- [ ] Refactor code to be more modular and readable and create dev branch
