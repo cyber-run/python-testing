@@ -1,4 +1,4 @@
-from scipy.optimize import fsolve
+from scipy.optimize import fsolve, minimize
 from typing import Tuple
 import numpy as np
 import itertools
@@ -32,7 +32,50 @@ def solve_for_mxyz(points: np.ndarray, angles: np.ndarray) -> np.ndarray:
             eq = np.cos(angle_rad) - (dot_product / (mag_1 * mag_2))
             equations.append(eq)
         return equations
-    return fsolve(equations, np.zeros(3))
+    return fsolve(equations, np.array([40, 20, 0]), xtol=0.00005)
+
+def solve_for_mxyz_minimize(points: np.ndarray, angles: np.ndarray, num_starts: int =10) -> np.ndarray:
+    """
+    Solve for mx, my, and mz using optimization (minimize) given a list of points and the respective angles between successive points.
+
+    Args:
+    points (np.ndarray): The array of points' coordinates.
+    angles (np.ndarray): The array of angles in degrees between successive points.
+    num_starts (int): The number of random starts for the optimization.
+
+    Returns:
+    np.ndarray: The optimized values of mx, my, and mz.
+    """
+
+    def objective(vars: np.ndarray) -> float:
+        mx, my, mz = vars
+        total_error = 0.0
+        for i in range(len(angles)):
+            vector_1 = points[i] - np.array([mx, my, mz])
+            vector_2 = points[i + 1] - np.array([mx, my, mz])
+            dot_product = np.dot(vector_1, vector_2)
+            mag_1 = np.linalg.norm(vector_1)
+            mag_2 = np.linalg.norm(vector_2)
+            angle_rad = np.radians(angles[i])
+            calculated_angle = np.arccos(dot_product / (mag_1 * mag_2))
+            error = (angle_rad - calculated_angle) ** 2
+            total_error += error
+        return total_error
+
+    best_result = None
+    best_error = np.inf
+
+    for _ in range(num_starts):
+        initial_guess = np.random.uniform(-70, 70, size=3)
+        result = minimize(objective, initial_guess, method='Nelder-Mead', options={'maxiter': 5000, 'xatol': 1e-8, 'fatol': 1e-8})
+        if result.fun < best_error:
+            best_error = result.fun
+            best_result = result
+
+    print(f'Optimization result message: {best_result.message}')
+    print(f'Optimization result fun: {best_result.fun}')
+    print(f'Optimization result success: {best_result.success}\n')
+    return best_result.x
 
 def def_local_coor_sys(points: np.ndarray, local_origin: np.ndarray) -> np.ndarray:
     """
@@ -176,7 +219,7 @@ if __name__ == "__main__":
     angles_example = np.array([17.701, 2.7967, 18.842])
 
     # Find local origin point
-    mx, my, mz = solve_for_mxyz(points_example, angles_example)
+    mx, my, mz = solve_for_mxyz_minimize(points_example, angles_example, 1000)
     local_origin = np.round(np.array([mx, my, mz]), 4)
     print(f"Solved local origin: {local_origin}")
 
