@@ -21,7 +21,8 @@ class ImageProcessor:
         """
         # Convert to grayscale if needed
         if self.needs_grayscale():
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if len(frame.shape) == 3 and frame.shape[2] == 3:  # Check if the image has 3 channels
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # Detect circles if the flag is set
         if self.detect_circle_flag:

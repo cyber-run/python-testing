@@ -304,6 +304,9 @@ class DART:
         if self.is_live:
             ret, frame = self.camera_manager.read_frame()
             if ret:
+                # Flip the frame horizontally
+                frame = cv2.flip(frame, 1)
+                
                 # Process the frame with all the selected options
                 processed_frame = self.image_pro.process_frame(frame)
                 self.display_frame(processed_frame)
