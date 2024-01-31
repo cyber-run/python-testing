@@ -3,6 +3,7 @@ logging.basicConfig(level=logging.INFO)
 
 from dyna_controller import DynaController
 from camera_manager import CameraManager
+from image_processor import ImageProcessor
 from dart_track import dart_track
 from CTkMessagebox import CTkMessagebox
 from multiprocessing import Process
@@ -39,21 +40,32 @@ class DART:
         self.window.title("DART")
 
     def init_hardware(self):
-        self.camera_manager = CameraManager()
-        self.target = MoCap(stream_type='3d')
+        # Create an instance of ImageProcessor
+        self.image_pro = ImageProcessor()
 
-        self.dyna = DynaController(com_port='COM5')
-        self.dyna.set_op_mode(1, 3)  # Pan to position control
-        self.dyna.set_op_mode(2, 3)  # Tilt to position control
-        self.set_pan(0)
-        self.set_tilt(0)
+        # Create an instance of CameraManager
+        self.camera_manager = CameraManager()
+
+        try:
+            self.target = MoCap(stream_type='3d')
+        except Exception as e:
+            logging.error(f"Error connecting to QTM: {e}")
+            self.target = None
+
+        try:
+            self.dyna = DynaController(com_port='COM5')
+            self.dyna.set_op_mode(1, 3)  # Pan to position control
+            self.dyna.set_op_mode(2, 3)  # Tilt to position control
+            self.set_pan(0)
+            self.set_tilt(0)
+        except:
+            logging.error("Error connecting to Dynamixel controller.")
+            self.dyna = None
 
     def init_gui_flags(self):
         # Camera/image functionality
         self.is_live = False
         self.is_saving_images = False
-        self.threshold_value = 70
-        self.strength_value = 60
 
         # Image processing GUI flags
         self.show_crosshair = tk.BooleanVar(value=False)
@@ -85,7 +97,7 @@ class DART:
         self.video_label = ctk.CTkLabel(self.window, text="")
         self.video_label.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        # Frame for motor controls
+        ################## Frame for motor controls ##################
         dyn_control_frame = ctk.CTkFrame(self.window)
         dyn_control_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
 
@@ -115,7 +127,7 @@ class DART:
         self.track_button = ctk.CTkButton(dyn_control_frame, text="Track", command=self.track)
         self.track_button.pack(side="top", padx=10, pady=10)
 
-        # Frame for camera controls
+        ################## Frame for camera controls ##################
         camera_control_frame = ctk.CTkFrame(self.window)
         camera_control_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
 
@@ -136,18 +148,28 @@ class DART:
         self.exposure_label = ctk.CTkLabel(exposure_frame, text="Exposure (us): 57500")
         self.exposure_label.pack()
 
-        # Frame for image processing detect
+        ################## Frame for image processing detect ##################
         img_processing_frame = ctk.CTkFrame(self.window)
         img_processing_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)  # Increase vertical padding
 
-        # Checkbox for crosshair, threshold, and detection
-        self.crosshair_checkbox = ctk.CTkCheckBox(img_processing_frame, text="Crosshair", variable=self.show_crosshair, onvalue=True, offvalue=False)
+        self.crosshair_checkbox = ctk.CTkCheckBox(
+            img_processing_frame,
+            text="Crosshair",
+            variable=self.show_crosshair,
+            command=lambda: setattr(self.image_pro, 'show_crosshair', self.show_crosshair.get()),
+            onvalue=True,
+            offvalue=False
+        )
         self.crosshair_checkbox.pack(side="left", padx=10)
 
-        # self.threshold_checkbox = ctk.CTkCheckBox(img_processing_frame, text="Threshold", variable=self.threshold_flag, onvalue=True, offvalue=False)
-        # self.threshold_checkbox.pack(side="left", padx=10)
-
-        self.detect_checkbox = ctk.CTkCheckBox(img_processing_frame, text="Detect", variable=self.detect_flag, onvalue=True, offvalue=False)
+        self.detect_checkbox = ctk.CTkCheckBox(
+            img_processing_frame,
+            text="Detect",
+            variable=self.detect_flag,
+            command=lambda: setattr(self.image_pro, 'detect_circle_flag', self.detect_flag.get()),
+            onvalue=True,
+            offvalue=False
+        )
         self.detect_checkbox.pack(side="left", padx=10)
 
         # Frame for threshold slider and label
@@ -185,18 +207,6 @@ class DART:
             # Add popup window to notify user that DART is not calibrated
             CTkMessagebox(title="Error", message="DART Not Calibrated", icon="cancel")
             logging.error("DART is not calibrated.")
-
-    def set_pan(self, value: float):
-        self.pan_value = int(value)
-        self.pan_label.configure(text=f"Pan angle: {int(value)}")
-        angle = vm2.num_to_range(self.pan_value, -45, 45, 202.5, 247.5)
-        self.dyna.set_pos(1, angle)
-
-    def set_tilt(self, value: float):
-        self.tilt_value = int(value)
-        self.tilt_label.configure(text=f"Tilt angle: {int(value)}")
-        angle = vm2.num_to_range(self.tilt_value, -45, 45, 292.5, 337.5)
-        self.dyna.set_pos(2, angle)
 
     def calibrate(self):
         """Handle the calibration process for the DART system."""
@@ -290,68 +300,18 @@ class DART:
             except AttributeError:
                 logging.error("Exposure not set.")
 
-    def set_threshold(self, value: float):
-        self.threshold_value = int(value)
-        self.threshold_label.configure(text=f"Threshold: {int(value)}")
-
-    def set_strength(self, value: float):
-        self.strength_value = int(value)
-        self.strength_label.configure(text=f"Strength: {int(value)}")
-
     def update_video_label(self):
         if self.is_live:
             ret, frame = self.camera_manager.read_frame()
             if ret:
                 # Process the frame with all the selected options
-                processed_frame = self.process_frame(frame)
+                processed_frame = self.image_pro.process_frame(frame)
                 self.display_frame(processed_frame)
                 
                 # Save the original or processed frame if needed
-                self.save_frame_if_needed(processed_frame)
+                self.save_frame(processed_frame)
 
             self.window.after(30, self.update_video_label)
-
-    def process_frame(self, frame):
-        # Convert to grayscale if needed and if the frame is color
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) \
-            if self.needs_grayscale() and len(frame.shape) > 2 and frame.shape[2] == 3 \
-            else frame
-
-        # Detect dots if needed
-        detection_frame = self.detect_circle(gray_frame) if self.detect_flag.get() else gray_frame
-
-        # Draw a crosshair if needed
-        crosshair_frame = self.draw_crosshair(detection_frame) if self.show_crosshair.get() else detection_frame
-
-        # Flip the frame both vertically and horizontally
-        flipped_frame = cv2.flip(crosshair_frame, -1)
-
-        return crosshair_frame
-
-    def needs_grayscale(self):
-        return self.threshold_flag.get() or self.detect_flag.get()
-
-    def detect_circle(self, frame):
-        # Assuming frame is in grayscale
-        # Blur the image to reduce noise
-        blurred_frame = cv2.medianBlur(frame, 5)
-        
-        # Apply Hough Circle Transform
-        circles = cv2.HoughCircles(blurred_frame, cv2.HOUGH_GRADIENT, dp=1.2, minDist=100,
-                                param1=self.threshold_value, param2=self.strength_value, minRadius=0, maxRadius=0)
-        
-        # If at least one circle is detected, draw it
-        if circles is not None:
-            circles = np.uint16(np.around(circles))
-            for i in circles[0, :]:
-                center = (i[0], i[1])  # circle center
-                radius = i[2]  # circle radius
-                # Draw the circle center
-                cv2.circle(frame, center, 1, (255, 0, 255), 3)
-                # Draw the circle outline
-                cv2.circle(frame, center, radius, (255, 0, 255), 2)
-        
-        return frame
 
     def display_frame(self, frame):
         cv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -360,29 +320,47 @@ class DART:
         self.video_label.imgtk = imgtk
         self.video_label.configure(image=imgtk)
 
-    def draw_crosshair(self, frame):
-        height, width = frame.shape[:2]
-        cv2.line(frame, (width // 2, 0), (width // 2, height), (0, 255, 0), 2)
-        cv2.line(frame, (0, height // 2), (width, height // 2), (0, 255, 0), 2)
-        return frame
-
-    def save_frame_if_needed(self, frame):
+    def save_frame(self, frame):
         if self.is_saving_images:
             timestamp = time.strftime("%Y%m%d-%H%M%S")
             filename = os.path.join(self.image_folder, f"image_{timestamp}.png")
             cv2.imwrite(filename, frame)
 
+    def set_threshold(self, value: float):
+        self.image_pro.threshold_value = int(value)
+        self.threshold_label.configure(text=f"Threshold: {int(value)}")
+
+    def set_strength(self, value: float):
+        self.image_pro.strength_value = int(value)
+        self.strength_label.configure(text=f"Strength: {int(value)}")
+
+    def set_pan(self, value: float):
+        self.pan_value = int(value)
+        self.pan_label.configure(text=f"Pan angle: {int(value)}")
+        angle = vm2.num_to_range(self.pan_value, -45, 45, 202.5, 247.5)
+        self.dyna.set_pos(1, angle)
+
+    def set_tilt(self, value: float):
+        self.tilt_value = int(value)
+        self.tilt_label.configure(text=f"Tilt angle: {int(value)}")
+        angle = vm2.num_to_range(self.tilt_value, -45, 45, 292.5, 337.5)
+        self.dyna.set_pos(2, angle)
+
     def on_closing(self):
-        # Close the camera
-        self.is_live = False
-        self.camera_manager.release()
+        if self.target:
+            # Close QTM connections
+            self.target._close()
+            self.target.close()
 
-        # Close QTM connections
-        self.target._close()
-        self.target.close()
+        try:
+            # Close the camera
+            self.is_live = False
+            self.camera_manager.release()
 
-        # Close serial port
-        self.dyna.close_port()
+            # Close serial port
+            self.dyna.close_port()
+        except:
+            pass
 
         # Terminate subprocess
         if hasattr(self, 'track_process') and self.track_process.is_alive():

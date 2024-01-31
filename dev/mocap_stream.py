@@ -7,9 +7,7 @@ import qtm
 
 # System imports
 import os
-import win32api
-import win32process
-import win32con
+import psutil
 
 
 class MoCap(Thread):
@@ -134,8 +132,17 @@ class MoCap(Thread):
 
 
 def set_realtime_priority():
-        handle = win32api.OpenProcess(win32con.PROCESS_ALL_ACCESS, True, os.getpid())
-        win32process.SetPriorityClass(handle, win32process.REALTIME_PRIORITY_CLASS) # you could set this to REALTIME_PRIORITY_CLASS etc.
+    try:
+        p = psutil.Process(os.getpid())
+        if psutil.WINDOWS:
+            p.nice(psutil.REALTIME_PRIORITY_CLASS)
+        elif psutil.LINUX or psutil.MACOS:
+            # Set a high priority; be cautious with setting it to -20 (maximum priority)
+            p.nice(-10)  # Modify this value as needed
+        else:
+            print("Platform not supported for priority setting.")
+    except Exception as e:
+        print(f"Error setting priority: {e}")
 
 
 class DataLogger:
