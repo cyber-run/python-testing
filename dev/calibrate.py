@@ -1,14 +1,47 @@
-import numpy as np
-import customtkinter as ctk
-import tkinter as tk
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 from typing import Tuple
-import matplotlib.pyplot as plt  # Make sure to import pyplot
+import numpy as np
+import math
 
+def calibrate(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the rotation matrix and intersection point that calibrates a system based on four points.
+    
+    Args:
+    p1, p2, p3, p4 (np.ndarray): Four points in the global coordinate system to calibrate against.
+    
+    Returns:
+    Tuple[np.ndarray, np.ndarray]: A tuple containing the rotation matrix and the intersection point.
+    """
+    x1, x2 = find_closest_points(p1, p2, p3, p4)
+    intersection = calculate_midpoint(x1, x2)
 
-# Function to find the closest points between two lines
+    vec1 = (p1 + p2) / 2 - intersection
+    vec2 = (p3 + p4) / 2 - intersection
+
+    vec1 = vec1 / np.linalg.norm(vec1)
+    vec2 = vec2 / np.linalg.norm(vec2)
+
+    x_axis = vec1
+    z_axis = np.cross(vec1, vec2)
+    y_axis = np.cross(x_axis, z_axis)
+
+    rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
+
+    return rotation_matrix, intersection
+
 def find_closest_points(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Find the closest points between two lines defined by pairs of points.
+    
+    Args:
+    p1, p2 (np.ndarray): Points defining the first line.
+    p3, p4 (np.ndarray): Points defining the second line.
+    
+    Returns:
+    Tuple[np.ndarray, np.ndarray]: The closest points on each line.
+    """
     d1 = p2 - p1
     d2 = p4 - p3
     n = np.cross(d1, d2)
@@ -25,56 +58,114 @@ def find_closest_points(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.n
 
     return closest_point_on_line1, closest_point_on_line2
 
-# Function to calculate the midpoint of the shortest line segment
 def calculate_midpoint(point1: np.ndarray, point2: np.ndarray) -> np.ndarray:
+    """
+    Calculate the midpoint between two points.
+    
+    Args:
+    point1, point2 (np.ndarray): Points to calculate the midpoint between.
+    
+    Returns:
+    np.ndarray: Midpoint between point1 and point2.
+    """
     return (point1 + point2) / 2
 
-# Function to plot the lines and midpoint on a canvas
-def plot_on_canvas():
-    plt.style.use('seaborn-v0_8-deep')  # Set the style to dark
+def global_to_local(point_global: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
+    """
+    Transform a point from global coordinates to local coordinates using a rotation matrix.
+    
+    Args:
+    point_global (np.ndarray): The point's coordinates in the global coordinate system.
+    rotation_matrix (np.ndarray): The rotation matrix for the transformation.
+    
+    Returns:
+    np.ndarray: The point's coordinates in the local coordinate system.
+    """
+    return np.dot(np.linalg.inv(rotation_matrix), point_global)
 
-    p1 = np.random.uniform(-100, 100, size=(3,))
-    p2 = np.random.uniform(-100, 100, size=(3,))
-    p3 = np.random.uniform(-100, 100, size=(3,))
-    p4 = np.random.uniform(-100, 100, size=(3,))
+def calc_rot_comp(point_local: np.ndarray) -> Tuple[float, float]:
+    """
+    Calculate the pan and tilt components of rotation from the positive X-axis.
 
-    closest_point1, closest_point2 = find_closest_points(p1, p2, p3, p4)
-    midpoint = calculate_midpoint(closest_point1, closest_point2)
+    Args:
+    point_local (np.ndarray): The point's coordinates in the local coordinate system.
 
-    fig = Figure(figsize=(5, 4), dpi=100)
+    Returns:
+    Tuple[float, float]: The pan and tilt rotation components.
+    """
+    pan_angle = math.degrees(math.atan2(point_local[1], point_local[0]))
+    tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[1]**2)))
+    return pan_angle, tilt_angle
+
+def plot_calibration(p1, p2, p3, p4, rotation_matrix, intersection):
+    """
+    Plots the calibration setup, including lines between the initial points,
+    the calculated intersection point, the axes of the calculated rotation matrix,
+    and the closest line segment between the two lines.
+    
+    Args:
+    p1, p2, p3, p4 (np.ndarray): Input points used for calibration.
+    rotation_matrix (np.ndarray): The rotation matrix obtained from calibration.
+    intersection (np.ndarray): The intersection point calculated during calibration.
+    """
+    fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.plot([p1[0], closest_point1[0]], [p1[1], closest_point1[1]], [p1[2], closest_point1[2]], label='Line 1')
-    ax.plot([p3[0], closest_point2[0]], [p3[1], closest_point2[1]], [p3[2], closest_point2[2]], label='Line 2')
-    ax.plot([closest_point1[0], closest_point2[0]], [closest_point1[1], closest_point2[1]], [closest_point1[2], closest_point2[2]], 'r-', label='Shortest Segment')
-    ax.scatter(*midpoint, color='purple', s=100, label='Midpoint')
+    # Plot lines between points
+    ax.plot(*zip(*[p1, p2]), color='g', label='Line 1')
+    ax.plot(*zip(*[p3, p4]), color='g', label='Line 2')
+
+    # Plot intersection point
+    ax.scatter(*intersection, color='b', s=100, label='Intersection Point')
+
+    # Plot axes of the rotation matrix from the intersection point
+    axis_length = 0.5  # Length of the axes
+    for i, axis in enumerate(['X', 'Y', 'Z']):
+        end_point = intersection + axis_length * rotation_matrix[:, i]
+        ax.quiver(*intersection, *(end_point-intersection), arrow_length_ratio=0.1, label=f'{axis}-axis')
+
+    # Calculate and plot the closest line segment between the two lines
+    closest_p1, closest_p2 = find_closest_points(p1, p2, p3, p4)
+    ax.plot(*zip(*[closest_p1, closest_p2]), color='r', linestyle='--', label='Closest Segment')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
     ax.legend()
+    plt.show()
 
-    canvas = FigureCanvasTkAgg(fig, master=window)  
-    canvas_widget = canvas.get_tk_widget()
-    canvas_widget.grid(row=0, column=0, columnspan=2)
+def main():
+    # Test find_closest_points function
+    # Sample points for the lines
+    p1 = np.random.uniform(-100, 100, size=(3,))
+    p2 = np.random.uniform(-100, 100, size=(3,))
 
-# Create a CustomTkinter window
-window = ctk.CTk()
-window.title("Matplotlib Graph in CustomTkinter")
-window.geometry("600x500")
 
-# Sample points for the lines
-p1 = np.random.uniform(-100, 100, size=(3,))
-p2 = np.random.uniform(-100, 100, size=(3,))
-p3 = np.random.uniform(-100, 100, size=(3,))
-p4 = np.random.uniform(-100, 100, size=(3,))
+    p3 = np.random.uniform(-100, 100, size=(3,))
+    p4 = np.random.uniform(-100, 100, size=(3,))
+    closest_p1, closest_p2 = find_closest_points(p1, p2, p3, p4)
+    print(f"Closest points on lines: {closest_p1}, {closest_p2}\n")
 
-# Button to plot the graph
-plot_button = ctk.CTkButton(master=window, text="Plot Graph", command=plot_on_canvas)
-plot_button.grid(row=1, column=0, pady=10, padx=10)
+    # Test calculate_midpoint function
+    midpoint = calculate_midpoint(closest_p1, closest_p2)
+    print(f"Midpoint between closest points: {midpoint}\n")
 
-# Run the application
-window.mainloop()
+    # Test calibrate function
+    rotation_matrix, intersection = calibrate(p1, p2, p3, p4)
+    print(f"Rotation Matrix: {rotation_matrix}\n\nIntersection Point: {intersection}\n")
 
-# List of used packages with versions
-required_packages = """
-customtkinter==4.5.1
-matplotlib==3.4.2
-numpy==1.21.2
-"""
+    # Test global_to_local function
+    point_global = np.array([1, 2, 3])
+    point_local = global_to_local(point_global, rotation_matrix)
+    print(f"Local coordinates of {point_global}: {point_local}\n")
+
+    # Test calc_rot_comp function
+    pan_angle, tilt_angle = calc_rot_comp(point_local)
+    print(f"Pan angle: {pan_angle}, Tilt angle: {tilt_angle}\n")
+
+    plot_calibration(p1, p2, p3, p4, rotation_matrix, intersection)
+
+
+if __name__ == "__main__":
+    main()
+
