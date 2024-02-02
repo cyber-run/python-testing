@@ -19,7 +19,7 @@ class DynaTracker:
     '''
     def __init__(self, com_port='COM5'):
         # Load calibration data if it exists
-        if os.path.exists('calib_data.pkl'):
+        if os.path.exists('config\calib_data.pkl'):
             with open('config\calib_data.pkl', 'rb') as f:
                 self.local_origin, self.rotation_matrix = pickle.load(f)
                 logging.info("Calibration data loaded successfully.")
@@ -39,31 +39,14 @@ class DynaTracker:
         self.dyna.set_op_mode(self.dyna.pan_id, 3)
         self.dyna.set_op_mode(self.dyna.tilt_id, 3)
 
-    def global_to_local(self, point_global: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
-        """
-        Transform a point from global coordinates to local coordinates using a rotation matrix.
-
-        Args:
-        point_global (np.ndarray): The point's coordinates in the global coordinate system.
-        rotation_matrix (np.ndarray): The rotation matrix for the transformation.
-
-        Returns:
-        np.ndarray: The point's coordinates in the local coordinate system.
-        """
-        return np.dot(np.linalg.inv(rotation_matrix), point_global)
+    def global_to_local(self, point_global: np.ndarray) -> np.ndarray:
+        if self.rotation_matrix is None:
+            raise ValueError("Calibration must be completed before transforming points.")
+        return np.dot(np.linalg.inv(self.rotation_matrix), point_global - self.local_origin)
 
     def calc_rot_comp(self, point_local: np.ndarray) -> Tuple[float, float]:
-        """
-        Calculate the pan and tilt components of rotation from the positive X-axis.
-
-        Args:
-        point_local (np.ndarray): The point's coordinates in the local coordinate system.
-
-        Returns:
-        Tuple[float, float]: The pan and tilt rotation components.
-        """
         pan_angle = math.degrees(math.atan2(point_local[1], point_local[0]))
-        tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[2]**2)))
+        tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[1]**2)))
         return pan_angle, tilt_angle
 
     def num_to_range(self, num, inMin, inMax, outMin, outMax):
@@ -80,7 +63,7 @@ class DynaTracker:
         target_pos = self.target.position
 
         # Get the local target position
-        local_target_pos = self.global_to_local(target_pos, self.rotation_matrix)
+        local_target_pos = self.global_to_local(target_pos)
 
         # Calculate the pan and tilt components of rotation from the positive X-axis
         pan_angle, tilt_angle = self.calc_rot_comp(local_target_pos)

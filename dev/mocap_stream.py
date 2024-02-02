@@ -117,10 +117,14 @@ class MoCap(Thread):
             pos = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
 
-            if self.calibration_target:
+            # Ensure there is more than one component before accessing it
+            if self.calibration_target and len(new_component) > 1:
                 pos = new_component[1]
                 self.position2 = [pos.x, pos.y, pos.z]
-            self.lost = False
+            else:
+                logging.info('Calibration target is set but only one marker detected.')
+
+        self.lost = False
 
     async def _close(self) -> None:
         """

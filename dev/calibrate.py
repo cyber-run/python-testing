@@ -33,6 +33,8 @@ class Calibrator:
         self.positions.append(p1)
         self.positions.append(p2)
 
+        print(f"Step: {self.calibration_step}\n Positions recorded: {p1}, {p2}")
+
         if len(self.positions) < 4:
             logging.info("More points needed for calibration.")
             return
@@ -54,9 +56,9 @@ class Calibrator:
 
         # Ensure the third vector is orthogonal to the first two
         x_axis = vec1_normalized
-        y_axis = np.cross(vec1_normalized, vec2_normalized)  # Cross product to find orthogonal vector
-        y_axis = y_axis / np.linalg.norm(y_axis)  # Normalize
-        z_axis = np.cross(x_axis, y_axis)  # Recompute to ensure orthogonality
+        z_axis = np.cross(vec1_normalized, vec2_normalized)  # Cross product to find orthogonal vector
+        z_axis = z_axis / np.linalg.norm(z_axis)  # Normalize
+        y_axis = np.cross(x_axis, z_axis)  # Recompute to ensure orthogonality
 
         self.rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
 
@@ -72,6 +74,7 @@ class Calibrator:
 
         if np.allclose(n, 0):
             raise ValueError("Lines are parallel")
+        
 
         A = np.array([d1, -d2, n]).T
         b = p3 - p1

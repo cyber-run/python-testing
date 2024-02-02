@@ -24,9 +24,13 @@ import os
 class DART:
     def __init__(self, window: ctk.CTk):
         self.init_window(window)
+        self.init_hardware()
+
         self.init_gui_flags()
         self.setup_gui_elements()
-        self.init_hardware()
+
+        self.set_pan(0)
+        self.set_tilt(0)
 
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.mainloop()
@@ -47,6 +51,7 @@ class DART:
         
         try:
             self.target = MoCap(stream_type='3d')
+            self.target.calibration_target = True
         except Exception as e:
             logging.error(f"Error connecting to QTM: {e}")
             self.target = None
@@ -55,8 +60,6 @@ class DART:
             self.dyna = DynaController(com_port='COM5')
             self.dyna.set_op_mode(1, 3)  # Pan to position control
             self.dyna.set_op_mode(2, 3)  # Tilt to position control
-            self.set_pan(0)
-            self.set_tilt(0)
         except:
             logging.error("Error connecting to Dynamixel controller.")
             self.dyna = None
@@ -65,6 +68,7 @@ class DART:
         # Camera/image functionality
         self.is_live = False
         self.is_saving_images = False
+        self.image_folder = "images"
 
         # Image processing GUI flags
         self.show_crosshair = tk.BooleanVar(value=False)
@@ -102,7 +106,7 @@ class DART:
         self.tilt_label.pack()
 
         # Create a calibration button
-        self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrator.run(self.target.position, self.target.position2))
+        self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrate)
         self.calibration_button.pack(side="top", padx=10, pady=10)
 
         # Create a track button
@@ -172,8 +176,13 @@ class DART:
         self.strength_label = ctk.CTkLabel(strength_frame, text="Strength: 60")
         self.strength_label.pack()
 
+    def calibrate(self):
+        p1 = np.array(self.target.position)
+        p2 = np.array(self.target.position2)
+        self.calibrator.run(p1, p2)
+
     def track(self):
-        if self.calibrated:
+        if self.calibrator.calibrated:
             # Close QTM connections
             self.target._close()
             self.target.close()
