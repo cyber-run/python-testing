@@ -33,11 +33,13 @@ class MoCap(Thread):
 
         # Kinematic data vars
         self.state = [0, 0, 0, 0, 0, 0]
-        self.position = [0,0]
+        self.position = [0,0,0]
+        self.position2 = [0,0,0]
         self.matrix = None
         self.yaw = 0
         self.pitch = 0
         self.lost = False
+        self.calibration_target = False
 
         self.start()
 
@@ -114,6 +116,10 @@ class MoCap(Thread):
 
             pos = new_component[0]
             self.position = [pos.x, pos.y, pos.z]
+
+            if self.calibration_target:
+                pos = new_component[1]
+                self.position2 = [pos.x, pos.y, pos.z]
             self.lost = False
 
     async def _close(self) -> None:

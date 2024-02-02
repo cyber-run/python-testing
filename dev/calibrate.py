@@ -1,55 +1,71 @@
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-from typing import Tuple
-import numpy as np
+import os
+import pickle
+import logging
 import math
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from typing import Tuple
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-class Callibrator:
+class Calibrator:
     def __init__(self):
-        self.vector_points = []
-        self.angle_difference = []
+        self.positions = []
         self.rotation_matrix = None
-        self.intersection = None
+        self.local_origin = None
+        self.calibration_step = 0
+        self.calibrated = False
 
-    def calibrate(self, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Calculate the rotation matrix and intersection point that calibrates a system based on four points.
-        
-        Args:
-        p1, p2, p3, p4 (np.ndarray): Four points in the global coordinate system to calibrate against.
-        
-        Returns:
-        Tuple[np.ndarray, np.ndarray]: A tuple containing the rotation matrix and the intersection point.
-        """
+        # Load calibration data if it exists
+        calib_data_path = 'config/calib_data.pkl'
+        if os.path.exists(calib_data_path):
+            with open(calib_data_path, 'rb') as f:
+                self.local_origin, self.rotation_matrix = pickle.load(f)
+                self.calibrated = True
+                logging.info("Calibration data loaded successfully.")
+                print(f"Local origin: {self.local_origin}")
+        else:
+            logging.info("No calibration data found.")
+
+    def run(self, p1: np.ndarray, p2: np.ndarray):
+        self.positions.append(p1)
+        self.positions.append(p2)
+
+        if len(self.positions) < 4:
+            logging.info("More points needed for calibration.")
+            return
+        else:
+            self.calibrate(*self.positions[:4])
+            self.positions = []  # Reset positions after calibration
+            self.calibrated = True
+            logging.info("Calibration completed.")
+
+    def calibrate(self, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray):
         x1, x2 = self.find_closest_points(p1, p2, p3, p4)
-        intersection = self.calculate_midpoint(x1, x2)
+        self.local_origin = self.calculate_midpoint(x1, x2)
 
-        vec1 = (p1 + p2) / 2 - intersection
-        vec2 = (p3 + p4) / 2 - intersection
+        vec1 = (p1 + p2) / 2 - self.local_origin
+        vec2 = (p3 + p4) / 2 - self.local_origin
 
-        vec1 = vec1 / np.linalg.norm(vec1)
-        vec2 = vec2 / np.linalg.norm(vec2)
+        vec1_normalized = vec1 / np.linalg.norm(vec1)
+        vec2_normalized = vec2 / np.linalg.norm(vec2)
 
-        x_axis = vec1
-        z_axis = np.cross(vec1, vec2)
-        y_axis = np.cross(x_axis, z_axis)
+        # Ensure the third vector is orthogonal to the first two
+        x_axis = vec1_normalized
+        y_axis = np.cross(vec1_normalized, vec2_normalized)  # Cross product to find orthogonal vector
+        y_axis = y_axis / np.linalg.norm(y_axis)  # Normalize
+        z_axis = np.cross(x_axis, y_axis)  # Recompute to ensure orthogonality
 
-        rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
+        self.rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
 
-        return rotation_matrix, intersection
+        os.makedirs('config', exist_ok=True)  # Ensure the config directory exists
+        with open('config/calib_data.pkl', 'wb') as f:
+            pickle.dump((self.local_origin, self.rotation_matrix), f)
+            logging.info("Calibration data saved successfully.")
 
-    def find_closest_points(self, p1: np.ndarray[float], p2: np.ndarray[float], p3: np.ndarray[float], p4: np.ndarray[float]) -> Tuple[np.ndarray[float], np.ndarray[float]]:
-        """
-        Find the closest points between two lines defined by pairs of points.
-        
-        Args:
-        p1, p2 (np.ndarray): Points defining the first line.
-        p3, p4 (np.ndarray): Points defining the second line.
-        
-        Returns:
-        Tuple[np.ndarray, np.ndarray]: The closest points on each line.
-        """
+    def find_closest_points(self, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         d1 = p2 - p1
         d2 = p4 - p3
         n = np.cross(d1, d2)
@@ -67,114 +83,73 @@ class Callibrator:
         return closest_point_on_line1, closest_point_on_line2
 
     def calculate_midpoint(self, point1: np.ndarray, point2: np.ndarray) -> np.ndarray:
-        """
-        Calculate the midpoint between two points.
-        
-        Args:
-        point1, point2 (np.ndarray): Points to calculate the midpoint between.
-        
-        Returns:
-        np.ndarray: Midpoint between point1 and point2.
-        """
         return (point1 + point2) / 2
 
-    def global_to_local(self, point_global: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
-        """
-        Transform a point from global coordinates to local coordinates using a rotation matrix.
-        
-        Args:
-        point_global (np.ndarray): The point's coordinates in the global coordinate system.
-        rotation_matrix (np.ndarray): The rotation matrix for the transformation.
-        
-        Returns:
-        np.ndarray: The point's coordinates in the local coordinate system.
-        """
-        return np.dot(np.linalg.inv(rotation_matrix), point_global)
+    def global_to_local(self, point_global: np.ndarray) -> np.ndarray:
+        if self.rotation_matrix is None:
+            raise ValueError("Calibration must be completed before transforming points.")
+        return np.dot(np.linalg.inv(self.rotation_matrix), point_global - self.local_origin)
 
     def calc_rot_comp(self, point_local: np.ndarray) -> Tuple[float, float]:
-        """
-        Calculate the pan and tilt components of rotation from the positive X-axis.
-
-        Args:
-        point_local (np.ndarray): The point's coordinates in the local coordinate system.
-
-        Returns:
-        Tuple[float, float]: The pan and tilt rotation components.
-        """
         pan_angle = math.degrees(math.atan2(point_local[1], point_local[0]))
         tilt_angle = math.degrees(math.atan2(point_local[2], math.sqrt(point_local[0]**2 + point_local[1]**2)))
         return pan_angle, tilt_angle
 
-    def plot_calibration(self, p1, p2, p3, p4, rotation_matrix, intersection):
-        """
-        Plots the calibration setup, including lines between the initial points,
-        the calculated intersection point, the axes of the calculated rotation matrix,
-        and the closest line segment between the two lines.
-        
-        Args:
-        p1, p2, p3, p4 (np.ndarray): Input points used for calibration.
-        rotation_matrix (np.ndarray): The rotation matrix obtained from calibration.
-        intersection (np.ndarray): The intersection point calculated during calibration.
-        """
+    def verify_orthogonality(self):
+        if self.rotation_matrix is not None:
+            # Check if the rotation matrix is orthogonal
+            is_orthogonal = np.allclose(np.dot(self.rotation_matrix.T, self.rotation_matrix), np.eye(3))
+            if not is_orthogonal:
+                logging.warning("The rotation matrix is not orthogonal.")
+            else:
+                logging.info("The rotation matrix is orthogonal.")
+        else:
+            logging.info("Rotation matrix not set.")
+
+    def plot_calibration(self, p1, p2, p3, p4):
+        if self.rotation_matrix is None or self.local_origin is None:
+            logging.error("Calibration data not available.")
+            return
+
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
-        # Plot lines between points
-        ax.plot(*zip(*[p1, p2]), color='g', label='Line 1')
-        ax.plot(*zip(*[p3, p4]), color='g', label='Line 2')
-
-        # Plot intersection point
-        ax.scatter(*intersection, color='b', s=100, label='Intersection Point')
-
         # Plot axes of the rotation matrix from the intersection point
-        axis_length = 0.5  # Length of the axes
+        axis_length = 1.0  # Adjust for better visualization
         for i, axis in enumerate(['X', 'Y', 'Z']):
-            end_point = intersection + axis_length * rotation_matrix[:, i]
-            ax.quiver(*intersection, *(end_point-intersection), arrow_length_ratio=0.1, label=f'{axis}-axis')
-
-        # Calculate and plot the closest line segment between the two lines
-        closest_p1, closest_p2 = self.find_closest_points(p1, p2, p3, p4)
-        ax.plot(*zip(*[closest_p1, closest_p2]), color='r', linestyle='--', label='Closest Segment')
+            end_point = self.local_origin + axis_length * self.rotation_matrix[:, i]
+            ax.quiver(*self.local_origin, *(self.rotation_matrix[:, i]), length=axis_length, label=f'{axis}-axis')
 
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
         ax.legend()
+        plt.title('Calibration Axes')
         plt.show()
 
 def main():
-    calib = Callibrator()
+    calib = Calibrator()
     # Test find_closest_points function
     # Sample points for the lines
     p1 = np.random.uniform(-100, 100, size=(3,))
     p2 = np.random.uniform(-100, 100, size=(3,))
-
+    calib.run(p1, p2)
 
     p3 = np.random.uniform(-100, 100, size=(3,))
     p4 = np.random.uniform(-100, 100, size=(3,))
-    closest_p1, closest_p2 = calib.find_closest_points(p1, p2, p3, p4)
-    print(f"Closest points on lines: {closest_p1}, {closest_p2}\n")
+    calib.run(p3,p4)
+    print(f"Rotation Matrix: {calib.rotation_matrix}\n\nIntersection Point: {calib.local_origin}\n")
 
-    # Test calculate_midpoint function
-    midpoint = calib.calculate_midpoint(closest_p1, closest_p2)
-    print(f"Midpoint between closest points: {midpoint}\n")
-
-    # Test calibrate function
-    rotation_matrix, intersection = calib.calibrate(p1, p2, p3, p4)
-    print(f"Rotation Matrix: {rotation_matrix}\n\nIntersection Point: {intersection}\n")
-
-    # Test global_to_local function
     point_global = np.array([1, 2, 3])
-    point_local = calib.global_to_local(point_global, rotation_matrix)
+    point_local = calib.global_to_local(point_global)
     print(f"Local coordinates of {point_global}: {point_local}\n")
 
     # Test calc_rot_comp function
     pan_angle, tilt_angle = calib.calc_rot_comp(point_local)
     print(f"Pan angle: {pan_angle}, Tilt angle: {tilt_angle}\n")
 
-    calib.plot_calibration(p1, p2, p3, p4, rotation_matrix, intersection)
-
+    calib.verify_orthogonality()
+    calib.plot_calibration(p1, p2, p3, p4)
 
 if __name__ == "__main__":
     main()
-

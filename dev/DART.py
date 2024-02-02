@@ -4,6 +4,7 @@ logging.basicConfig(level=logging.INFO)
 from dyna_controller import DynaController
 from camera_manager import CameraManager
 from image_processor import ImageProcessor
+from calibrate import Calibrator
 from dart_track import dart_track
 from CTkMessagebox import CTkMessagebox
 from multiprocessing import Process
@@ -26,7 +27,6 @@ class DART:
         self.init_gui_flags()
         self.setup_gui_elements()
         self.init_hardware()
-        self.init_calibration()
 
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.mainloop()
@@ -42,6 +42,9 @@ class DART:
         # Create an instance of CameraManager
         self.camera_manager = CameraManager()
 
+        # Create an instance of Calibrator
+        self.calibrator = Calibrator()
+        
         try:
             self.target = MoCap(stream_type='3d')
         except Exception as e:
@@ -72,26 +75,6 @@ class DART:
         self.pan_value = 0
         self.tilt_value = 0
 
-    def init_calibration(self):
-        # Calibration variables
-        self.calibration_button_state = "initial"
-        self.calibration_positions = []
-        self.calibration_angles = []
-        self.calibrated = False
-        self.calibration_step = 0
-        self.true_angle = 0
-        self.pan_angle = 0
-
-        # Load calibration data if it exists
-        if os.path.exists('config\calib_data.pkl'):
-            with open('config\calib_data.pkl', 'rb') as f:
-                self.local_origin, self.rotation_matrix = pickle.load(f)
-                self.calibrated = True
-                logging.info("Calibration data loaded successfully.")
-                print(f"Local origin: {self.local_origin}")
-        else:
-            logging.info("No calibration data found.")
-
     def setup_gui_elements(self):
         self.video_label = ctk.CTkLabel(self.window, text="")
         self.video_label.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
@@ -119,7 +102,7 @@ class DART:
         self.tilt_label.pack()
 
         # Create a calibration button
-        self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrate)
+        self.calibration_button = ctk.CTkButton(dyn_control_frame, text="Calibrate", command=self.calibrator.run(self.target.position, self.target.position2))
         self.calibration_button.pack(side="top", padx=10, pady=10)
 
         # Create a track button
