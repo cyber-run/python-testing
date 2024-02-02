@@ -22,9 +22,9 @@
 
 - [x] Add sync read and optimise param delcarlation for sync methods
 
-- [ ] Optimse fsolve for better convergence ie initial guess; more runs; higher tolerance
+- [x] Optimse fsolve for better convergence ie initial guess; more runs; higher tolerance
 
-- [ ] Fix bug where calibration angle carries over to another run in session
+- [x] Fix bug where calibration angle carries over to another run in session
 
 - [ ] Add stop button for tracking -> terminate process
 

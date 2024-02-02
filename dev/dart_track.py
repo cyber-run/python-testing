@@ -20,7 +20,7 @@ class DynaTracker:
     def __init__(self, com_port='COM5'):
         # Load calibration data if it exists
         if os.path.exists('calib_data.pkl'):
-            with open('calib_data.pkl', 'rb') as f:
+            with open('config\calib_data.pkl', 'rb') as f:
                 self.local_origin, self.rotation_matrix = pickle.load(f)
                 logging.info("Calibration data loaded successfully.")
         else:
@@ -29,7 +29,7 @@ class DynaTracker:
 
         # Connect to QTM; init tracker and target
         self.target = MoCap(stream_type='3d')
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         # Create dynamixel controller object and open serial port
         self.dyna = DynaController(com_port)

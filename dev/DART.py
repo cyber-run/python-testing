@@ -21,10 +21,6 @@ import os
 
 
 class DART:
-    CALIBRATION_INITIAL = 1
-    CALIBRATION_MIDDLE = 2
-    CALIBRATION_FINAL = 4
-
     def __init__(self, window: ctk.CTk):
         self.init_window(window)
         self.init_gui_flags()
@@ -87,11 +83,14 @@ class DART:
         self.pan_angle = 0
 
         # Load calibration data if it exists
-        if os.path.exists('calib_data.pkl'):
-            with open('calib_data.pkl', 'rb') as f:
+        if os.path.exists('config\calib_data.pkl'):
+            with open('config\calib_data.pkl', 'rb') as f:
                 self.local_origin, self.rotation_matrix = pickle.load(f)
                 self.calibrated = True
                 logging.info("Calibration data loaded successfully.")
+                print(f"Local origin: {self.local_origin}")
+        else:
+            logging.info("No calibration data found.")
 
     def setup_gui_elements(self):
         self.video_label = ctk.CTkLabel(self.window, text="")
@@ -207,80 +206,6 @@ class DART:
             # Add popup window to notify user that DART is not calibrated
             CTkMessagebox(title="Error", message="DART Not Calibrated", icon="cancel")
             logging.error("DART is not calibrated.")
-
-    def calibrate(self):
-        """Handle the calibration process for the DART system."""
-        if self.calibration_button_state == "initial":
-            # Reset calibration lists
-            self.calibration_positions = []  # Reset positions list
-            self.calibration_angles = []  # Reset angles list
-
-            # First click: set pan angle to -5
-            self.pan_angle = -5
-            self.set_pan(self.pan_angle)
-            time.sleep(0.1) # HACK: Add small blocking delay to allow pan to move
-
-            # Change state and button text
-            self.calibration_button_state = "collecting"
-            self.update_calibration_button("Next", "green")
-
-            # Capture true current pan angle when at initial state
-            self.true_angle = vm2.num_to_range(self.dyna.get_pos(1), 202.5, 247.5, -45, 45)
-        else:
-            # Capture current target position
-            self.calibration_positions.append(self.target.position)
-
-            # Calculate and record true angle change if not the first measurement
-            if self.calibration_step > 0:
-                angle_change = self.true_angle - vm2.num_to_range(self.dyna.get_pos(1), 202.5, 247.5, -45, 45)
-                self.calibration_angles.append(angle_change)
-                print(f"Angle change: {angle_change}")
-                self.true_angle = vm2.num_to_range(self.dyna.get_pos(1), 202.5, 247.5, -45, 45)
-
-            # Update pan angle and step
-            self.pan_angle += 5
-            self.set_pan(self.pan_angle)
-            self.calibration_step += 1
-
-            # Check if the calibration is at the final step
-            if self.calibration_step >= self.CALIBRATION_FINAL:
-                self.perform_final_calibration()
-                self.calibration_button_state = "initial"
-                self.update_calibration_button("Calibrate", '#3a7ebf')
-                self.calibration_step = 0  # Reset for next calibration
-                self.set_pan(0)  # Reset pan angle
-
-    def perform_final_calibration(self, load_saved_data : bool = True):
-        """Perform the final step of the calibration process."""
-        try:
-            if load_saved_data:
-                position_array = np.loadtxt("calib_pos.csv", delimiter=",")
-                angle_array = np.loadtxt("calib_ang.csv", delimiter=",")
-                print('Loaded saved data.')
-            else:
-                position_array = np.array(self.calibration_positions)
-                angle_array = np.array(self.calibration_angles)
-                np.savetxt("calib_pos.csv", position_array, delimiter=",")
-                np.savetxt("calib_ang.csv", angle_array, delimiter=",")
-
-            position_array = np.around(position_array, 4)
-            angle_array = np.around(angle_array, 4)
-
-            initial_guess = np.array([-461, -497, -6])
-            self.local_origin, self.rotation_matrix = vm2.calibrate(position_array, angle_array, initial_guess)
-            self.calibrated = True
-
-            with open('calib_data.pkl', 'wb') as f:
-                pickle.dump((self.local_origin, self.rotation_matrix), f)
-
-            logging.info("Calibration completed successfully.")
-        except Exception as e:
-            logging.error(f"Error during final calibration: {e}")
-
-    def update_calibration_button(self, text, color):
-        """Update the calibration button's text and background color."""
-        self.calibration_button.configure(text=text, fg_color=color, command=self.calibrate)
-        self.calibration_button_state = text.lower()
 
     def toggle_video_feed(self):
         self.is_live = not self.is_live
