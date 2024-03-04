@@ -29,3 +29,7 @@
 - [ ] Add stop button for tracking -> terminate process
 
 - [ ] Refactor code to be more modular and readable and create dev branch
+
+- [ ] take the mean of multiple markers
+
+- [ ] tilt calibration

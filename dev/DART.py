@@ -49,17 +49,19 @@ class DART:
         # Create an instance of Calibrator
         self.calibrator = Calibrator()
         
-        try:
-            self.target = MoCap(stream_type='3d')
-            self.target.calibration_target = True
-        except Exception as e:
-            logging.error(f"Error connecting to QTM: {e}")
-            self.target = None
+        # try:
+        #     self.target = MoCap(stream_type='3d')
+        #     self.target.calibration_target = True
+        # except Exception as e:
+        #     logging.error(f"Error connecting to QTM: {e}")
+        #     self.target = None
 
         try:
             self.dyna = DynaController(com_port='COM5')
+            self.dyna.open_port()
             self.dyna.set_op_mode(1, 3)  # Pan to position control
             self.dyna.set_op_mode(2, 3)  # Tilt to position control
+            self.dyna.set_sync_pos(225, 315)
         except:
             logging.error("Error connecting to Dynamixel controller.")
             self.dyna = None
@@ -206,6 +208,7 @@ class DART:
             self.update_video_label()
 
     def toggle_image_saving(self):
+        self.camera_manager.release()
         self.is_saving_images = not self.is_saving_images
         self.record_button.configure(text="Stop Saving Images" if self.is_saving_images else "Start Saving Images")
 
@@ -267,27 +270,37 @@ class DART:
         self.dyna.set_pos(2, angle)
 
     def on_closing(self):
-        if self.target:
-            # Close QTM connections
+        try:
             self.target._close()
             self.target.close()
-
+        except Exception as e:
+            logging.error(f"Error closing QTM connection: {e}")
+            
         try:
             # Close the camera
             self.is_live = False
             self.camera_manager.release()
+        except Exception as e:
+            logging.error(f"Error closing camera or serial port: {e}")
 
-            # Close serial port
+        try:
+            # Close the serial port
             self.dyna.close_port()
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Error closing serial port: {e}")
 
         # Terminate subprocess
         if hasattr(self, 'track_process') and self.track_process.is_alive():
-            self.track_process.terminate()
-            self.track_process.join()  # Wait for the process to terminate
+            try:
+                self.track_process.terminate()
+                self.track_process.join()  # Wait for the process to terminate
+            except Exception as e:
+                logging.error(f"Error terminating track process: {e}")
 
-        self.window.destroy()
+        try:
+            self.window.destroy()
+        except Exception as e:
+            logging.error(f"Error closing window: {e}")
 
 if __name__ == "__main__":
     root = ctk.CTk()

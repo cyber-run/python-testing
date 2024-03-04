@@ -3,4 +3,7 @@ _*
 .*
 venv312/
 venv*
-CameraTests/images/
+misc/
+dev/images/
+dev/data/
+dev/config/

@@ -1,3 +1,6 @@
+from threading import Thread
+from queue import Queue
+import os, time, sys
 import EasyPySpin
 import logging
 import cv2 
@@ -6,6 +9,7 @@ class CameraManager:
     def __init__(self):
         self.cap = None
         self.initialize_camera()
+        self.image_folder = "images"
 
     def initialize_camera(self):
         try:
@@ -23,6 +27,7 @@ class CameraManager:
             desired_width, desired_height = 960, 720
             self.set_camera_properties(desired_width, desired_height)
             self.center_roi_on_sensor(desired_width, desired_height)
+        pass
 
     def set_camera_properties(self, width, height):
         try:
@@ -55,3 +60,34 @@ class CameraManager:
     def release(self):
         if self.cap:
             self.cap.release()
+
+def write_images(q, camera_manager):
+    while True:
+        frame, filename = q.get()
+        cv2.imwrite(filename, frame)
+        q.task_done()
+
+def camera_record():
+    logging.basicConfig(level=logging.ERROR)
+    camera_manager = CameraManager()
+    q = Queue()
+    writer = Thread(target=write_images, args=(q, camera_manager))
+    writer.daemon = True
+    writer.start()
+
+    try:
+        while True:
+            _, frame = camera_manager.read_frame()
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = os.path.join(camera_manager.image_folder, f"image_{timestamp}.bmp")
+            q.put((frame, filename))
+
+    except KeyboardInterrupt:
+        camera_manager.release()
+        print("Camera released successfully\n")
+        sys.exit(0)
+
+    except Exception as e:
+        camera_manager.release()
+        print(f"An error occurred: {e}")
+        sys.exit(1)

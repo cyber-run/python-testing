@@ -1,7 +1,12 @@
 from dynamixel_sdk import *  # Uses Dynamixel SDK library
-from typing import Tuple
+from mocap_stream import set_realtime_priority
+from typing import Dict, Tuple
+import numpy as np
+import cProfile
 import logging
+import math
 import time
+
 
 class DynaController:
     def __init__(self, com_port: str = 'COM5', baud_rate: int = 4000000) -> None:
@@ -13,6 +18,12 @@ class DynaController:
         self.X_SET_POS = 116            # Set position
         self.X_GET_VEL = 128            # Get velocity
         self.X_GET_POS = 132            # Get position
+        self.X_SET_CURRENT = 102         # Set torque
+        self.X_GET_CURRENT = 126         # Get torque
+        self.X_SET_PWM = 100            # Set PWM
+        self.X_P_GAIN = 84              # P gain
+        self.X_D_GAIN = 80              # D gain
+        self.X_FF_2_GAIN = 88           # Feedforward 2 gain
 
         # Protocol version : # X-series uses protocol version 2.0
         self.PROTOCOL_VERSION = 2.0
@@ -20,7 +31,6 @@ class DynaController:
         # Dynamixel motors IDs (crossref with wizard)
         self.pan_id = int(1)
         self.tilt_id = int(2)
-        self.zoom_id = int(3)
 
         # COM and U2D2 params
         self.baud = baud_rate
@@ -46,12 +56,19 @@ class DynaController:
                 logging.error("[ID:%03d] groupSyncRead addparam failed" % motor_id)
                 quit()
 
+        # Initialize GroupSyncWrite instance
+        self.pwm_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, self.X_SET_PWM, 2)
+        # Prepare empty byte array for initial parameter storage
+        empty_byte_array = [0, 0]
+        # Add initial parameters for pan and tilt motors
+        for motor_id in [self.pan_id, self.tilt_id]:
+            self.pwm_sync_write.addParam(motor_id, empty_byte_array)
+
         # Open port
-        self.open_port()
+        # self.open_port()
 
         # Init motor rotations to normal forward gaze
-        self.set_sync_pos(225, 315)
-        
+        # self.set_sync_pos(225, 315)
 
     def open_port(self) -> bool:
         '''
@@ -77,6 +94,66 @@ class DynaController:
             print(f"Error opening port: {e}")
             return False
 
+    def set_sync_current(self, pan_current: int, tilt_current: int) -> None:
+        """
+        Synchronously set the current for the pan and tilt motors.
+
+        Parameters:
+        - pan_current (int): The current value to set for the pan motor.
+        - tilt_current (int): The current value to set for the tilt motor.
+        """
+        # Initialize GroupSyncWrite instance for current
+        current_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, self.X_SET_CURRENT, 2)
+        
+        # Convert current values into byte arrays
+        pan_current_bytes = [DXL_LOBYTE(pan_current), DXL_HIBYTE(pan_current)]
+        tilt_current_bytes = [DXL_LOBYTE(tilt_current), DXL_HIBYTE(tilt_current)]
+        
+        # Add parameter for pan and tilt motors
+        current_sync_write.addParam(self.pan_id, pan_current_bytes)
+        current_sync_write.addParam(self.tilt_id, tilt_current_bytes)
+        
+        # Execute sync write
+        dxl_comm_result = current_sync_write.txPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            logging.error(f"Failed to set sync current: {self.packet_handler.getTxRxResult(dxl_comm_result)}")
+        
+        # Clear sync write parameter storage
+        current_sync_write.clearParam()
+
+    def get_sync_current(self) -> Tuple[int, int]:
+        """
+        Synchronously get the current for the pan and tilt motors.
+
+        Returns:
+        - Tuple[int, int]: The current values of the pan and tilt motors.
+        """
+        # Initialize GroupSyncRead instance for current
+        current_sync_read = GroupSyncRead(self.port_handler, self.packet_handler, self.X_GET_CURRENT, 2)
+        
+        # Add motor IDs to sync read
+        current_sync_read.addParam(self.pan_id)
+        current_sync_read.addParam(self.tilt_id)
+        
+        # Execute sync read
+        dxl_comm_result = current_sync_read.txRxPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            logging.error(f"Failed to get sync current: {self.packet_handler.getTxRxResult(dxl_comm_result)}")
+            return (-1, -1)  # Indicate an error
+
+        # Retrieve the data
+        pan_current = current_sync_read.getData(self.pan_id, self.X_GET_CURRENT, 2)
+        tilt_current = current_sync_read.getData(self.tilt_id, self.X_GET_CURRENT, 2)
+
+        # Convert from 2 bytes to integers
+        pan_current_value = DXL_MAKEWORD(pan_current[0], pan_current[1]) if pan_current is not None else -1
+        tilt_current_value = DXL_MAKEWORD(tilt_current[0], tilt_current[1]) if tilt_current is not None else -1
+
+        # Clear sync read parameter storage
+        current_sync_read.clearParam()
+        
+        return (pan_current_value, tilt_current_value)
+    
     def set_pos(self, motor_id: int = 1, pos: float = 180) -> None:
         '''
         Set servo position in degrees for a specified motor.
@@ -113,6 +190,26 @@ class DynaController:
 
         # Syncwrite goal position
         self.pos_sync_write.txPacket()
+
+    def set_sync_pwm(self, pan_pwm: float = 0, tilt_pwm: float = 0) -> None:
+        '''
+        Set servo position synchronously for both motors.
+        
+        Parameters:
+        - pan_pwm (float): Desired pan pwm %
+        - tilt_pwm (float): Desired tilt pwm %.
+        '''
+
+        # Allocate goal positions value into byte array
+        pan_byte_array = [DXL_LOBYTE(DXL_LOWORD(pan_pwm)), DXL_HIBYTE(DXL_LOWORD(pan_pwm))]
+        tilt_byte_array = [DXL_LOBYTE(DXL_LOWORD(tilt_pwm)), DXL_HIBYTE(DXL_LOWORD(tilt_pwm))]
+
+        # Change the parameters in the syncwrite storage
+        self.pwm_sync_write.changeParam(self.pan_id, pan_byte_array)
+        self.pwm_sync_write.changeParam(self.tilt_id, tilt_byte_array)
+
+        # Syncwrite goal position
+        self.pwm_sync_write.txPacket()
 
     def get_pos(self, motor_id: int = 1) -> float:
         '''
@@ -220,7 +317,7 @@ class DynaController:
         Set servo operating mode.
 
         Parameters:
-        - mode (int): Operating mode to set. 3 => position control, 1 => velocity control.
+        - mode (int): Operating mode to set: 3 => position control, 1 => velocity control, 0 => torque control.
         '''
         # Disable torque to set operating mode
         self.set_torque(motor_id, False)
@@ -251,8 +348,51 @@ class DynaController:
 
         return op_mode
 
+    def set_gains(self, motor_id: int = 1, p_gain: int = 800, d_gain: int = 0, ff_2_gain: int = 0) -> None:
+        '''
+        Set servo motor gains.
+
+        Parameters:
+        - motor_id (int): ID of the motor.
+        - p_gain (int): Proportional gain.
+        - d_gain (int): Derivative gain.
+        - ff_2_gain (int): Feedforward 2 gain.
+        '''
+        self.write2ByteData(motor_id, self.X_P_GAIN, p_gain)
+        self.write2ByteData(motor_id, self.X_D_GAIN, d_gain)
+        self.write2ByteData(motor_id, self.X_FF_2_GAIN, ff_2_gain)
+
+    def get_gains(self, motor_id: int = 1) -> Dict[str, int]:
+        '''
+        Get current motor gains.
+
+        Parameters:
+        - motor_id (int): ID of the motor.
+
+        Returns:
+        - Dict[str, int]: Dictionary containing the current PID gains.
+        '''
+        p_gain = self.read2ByteData(motor_id, self.X_P_GAIN)
+        d_gain = self.read2ByteData(motor_id, self.X_D_GAIN)
+        ff_2_gain = self.read2ByteData(motor_id, self.X_FF_2_GAIN)
+
+        gains = {
+            "p_gain": p_gain,
+            "d_gain": d_gain,
+            "ff_2_gain": ff_2_gain
+        }
+
+        return gains
+        
     def write1ByteData(self, motor_id, address, value):
         dxl_comm_result, dxl_error = self.packet_handler.write1ByteTxRx(self.port_handler, motor_id, address, value)
+        if dxl_comm_result != COMM_SUCCESS:
+            logging.debug(self.packet_handler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            logging.error(self.packet_handler.getRxPacketError(dxl_error))
+
+    def write2ByteData(self, motor_id, address, value):
+        dxl_comm_result, dxl_error = self.packet_handler.write2ByteTxRx(self.port_handler, motor_id, address, value)
         if dxl_comm_result != COMM_SUCCESS:
             logging.debug(self.packet_handler.getTxRxResult(dxl_comm_result))
         elif dxl_error != 0:
@@ -267,6 +407,17 @@ class DynaController:
 
     def read1ByteData(self, motor_id, address):
         dxl_data, dxl_comm_result, dxl_error = self.packet_handler.read1ByteTxRx(self.port_handler, motor_id, address)
+        if dxl_comm_result != COMM_SUCCESS:
+            logging.debug(self.packet_handler.getTxRxResult(dxl_comm_result))
+            return None
+        elif dxl_error != 0:
+            logging.error(self.packet_handler.getRxPacketError(dxl_error))
+            return None
+        else:
+            return dxl_data
+
+    def read2ByteData(self, motor_id, address):
+        dxl_data, dxl_comm_result, dxl_error = self.packet_handler.read2ByteTxRx(self.port_handler, motor_id, address)
         if dxl_comm_result != COMM_SUCCESS:
             logging.debug(self.packet_handler.getTxRxResult(dxl_comm_result))
             return None
@@ -306,37 +457,161 @@ class DynaController:
     def close_port(self):
         self.port_handler.closePort()
 
+def get_curr_bode():
+    set_realtime_priority()
 
-if __name__ == '__main__':
-    # Initialise Dynamixel controller object and open port
     dyna = DynaController()
     dyna.open_port()
 
-    # Set operating mode of both to position control
+    dyna.set_op_mode(dyna.pan_id, 0)
+    dyna.set_op_mode(dyna.tilt_id, 0)
+
+    dyna.set_gains(dyna.pan_id, 650, 1300, 1200)
+    dyna.set_gains(dyna.tilt_id, 1400, 500, 900)
+
+    print(dyna.get_gains(dyna.pan_id))
+    print(dyna.get_gains(dyna.tilt_id))
+
+    # Set the frequency range for the Bode plot
+    start_freq = 0.2
+    end_freq = 10
+    num_points = 30
+
+    frequencies = np.round(np.logspace(np.log10(start_freq), np.log10(end_freq), num_points), num_points)
+
+    for frequency in frequencies:
+            # Center tracking servo to begin
+            # Starting delay
+            print(f"Frequency: {frequency} Hz")
+            curr_d_list = []
+            pan_pos_list = []
+            tilt_pos_list = []
+            time_list = []
+
+            dyna.set_sync_current(16, 16)
+
+            dyna.set_op_mode(dyna.pan_id, 3)
+            dyna.set_op_mode(dyna.tilt_id, 3)
+            dyna.set_sync_pos(225, 315)
+            time.sleep(0.3)
+
+            dyna.set_op_mode(dyna.pan_id, 16)
+            dyna.set_op_mode(dyna.tilt_id, 16)
+
+            time.sleep(1/2)
+
+            # Collect data for 8 periods
+            # duration = 8 * (1 / frequency)
+            start_time = time.perf_counter()
+
+            if frequency < 10:
+                duration = 10
+            else:
+                duration = 2
+
+            while time.perf_counter() - start_time < duration:
+                curr_d = (math.sin(2 * math.pi * frequency * (time.perf_counter() - start_time))) * 400
+                dyna.set_sync_pwm(int(curr_d), int(curr_d))
+                pan_pos, tilt_pos = dyna.get_sync_pos()
+
+                time_list.append(time.perf_counter() - start_time)
+                curr_d_list.append(int(curr_d))
+                pan_pos_list.append(pan_pos)
+                tilt_pos_list.append(tilt_pos)
+
+            # Save data for analysis
+            data_filename = f'data/data_{frequency}Hz'
+            np.savez(data_filename, time_list,curr_d_list, pan_pos_list, tilt_pos_list)
+            time.sleep(1)
+            dyna.set_sync_current(0, 0)
+
+def get_theta_bode():
+    set_realtime_priority()
+
+    dyna = DynaController()
+    dyna.open_port()
+
     dyna.set_op_mode(dyna.pan_id, 3)
     dyna.set_op_mode(dyna.tilt_id, 3)
-    
-    pos = 0
-    direction = 1  # Determines whether the position is increasing or decreasing
 
-    # Example usage with motor IDs
-    try:
-        while True:
-            # Set position for each motor
-            dyna.set_sync_pos(pos, pos)
-            print(dyna.get_sync_pos())
+    dyna.set_gains(dyna.pan_id, 650, 1300, 1200)
+    dyna.set_gains(dyna.tilt_id, 1400, 500, 900)
 
-            # Update position
-            pos += direction
-            if pos >= 360 or pos <= 0:
-                direction *= -1  # Change direction at 0 and 360 degrees
+    print(dyna.get_gains(dyna.pan_id))
+    print(dyna.get_gains(dyna.tilt_id))
 
-            time.sleep(0.005)  # Sleep for a short duration
+    # Set the frequency range for the Bode plot
+    start_freq = 0.2
+    end_freq = 10
+    num_points = 30
 
-    except KeyboardInterrupt:
-        print("Exiting...")
-    finally:
-        dyna.close_port()
-        print("Port closed.")
-        exit()
-        
+    frequencies = np.round(np.logspace(np.log10(start_freq), np.log10(end_freq), num_points), num_points)
+
+    for frequency in frequencies:
+            # Center tracking servo to begin
+            # Starting delay
+            print(f"Frequency: {frequency} Hz")
+            theta_d_list = []
+            pan_pos_list = []
+            tilt_pos_list = []
+            time_list = []
+
+            dyna.set_sync_pos(225, 315)
+            time.sleep(0.3)
+
+            time.sleep(1/2)
+
+            # Collect data for 8 periods
+            # duration = 8 * (1 / frequency)
+            start_time = time.perf_counter()
+
+            if frequency < 10:
+                duration = 10
+            else:
+                duration = 2
+
+            while time.perf_counter() - start_time < duration:
+                theta_d = (math.sin(2 * math.pi * frequency * (time.perf_counter() - start_time))) * 30
+                dyna.set_sync_pos(225 + theta_d, 315 + theta_d)
+                pan_pos, tilt_pos = dyna.get_sync_pos()
+
+                time_list.append(time.perf_counter() - start_time)
+                theta_d_list.append(int(theta_d))
+                pan_pos_list.append(pan_pos)
+                tilt_pos_list.append(tilt_pos)
+
+            # Save data for analysis
+            data_filename = f'data/data_{frequency}Hz'
+            np.savez(data_filename, time_list, theta_d_list, pan_pos_list, tilt_pos_list)
+            time.sleep(1)
+
+def main():
+    dyna = DynaController()
+    dyna.open_port()
+
+    dyna.set_op_mode(dyna.pan_id, 16)
+    dyna.set_op_mode(dyna.tilt_id, 16)
+
+    dyna.set_sync_pwm(0, 0)
+    time.sleep(2)
+    dyna.set_sync_pwm(-100.43, -100)
+    time.sleep(2)
+    dyna.set_sync_pwm(100, 100)
+
+def main2():
+    dyna = DynaController()
+    dyna.open_port()
+
+    dyna.set_op_mode(dyna.pan_id, 1)
+    dyna.set_op_mode(dyna.tilt_id, 1)
+
+    dyna.set_vel(dyna.pan_id, 5)
+    dyna.set_vel(dyna.tilt_id, 5)
+
+    dyna.set_torque(dyna.pan_id, False)
+    dyna.set_torque(dyna.tilt_id, False)
+
+if __name__ == "__main__":
+    # main()
+    # get_theta_bode()
+    get_curr_bode()
