@@ -1,9 +1,9 @@
+misc/
+dev/images/
+dev/data/
+dev/config
 _*
 !_dependancies
 .*
 venv312/
 venv*
-misc/
-dev/images/
-dev/data/
-dev/config/
